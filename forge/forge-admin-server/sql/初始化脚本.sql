@@ -1659,6 +1659,79 @@ CREATE TABLE `sys_user_social`
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户三方账号绑定表';
 
 
+-- forge_admin_new.sys_external_sync_batch definition
+
+CREATE TABLE `sys_external_sync_batch`
+(
+    `id`                bigint       NOT NULL AUTO_INCREMENT COMMENT '同步批次ID',
+    `tenant_id`          bigint       NOT NULL DEFAULT '0' COMMENT '租户编号',
+    `platform`           varchar(50)  NOT NULL COMMENT '外部平台（weaver等）',
+    `trigger_type`       varchar(20)  NOT NULL DEFAULT 'schedule' COMMENT '触发方式（schedule/manual）',
+    `status`             varchar(20)  NOT NULL DEFAULT 'running' COMMENT '状态（running/success/failed/partial）',
+    `started_at`         datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '开始时间',
+    `ended_at`           datetime              DEFAULT NULL COMMENT '结束时间',
+    `raw_snapshot_hash`  varchar(64)           DEFAULT NULL COMMENT '本次原始快照hash（用于幂等/审计）',
+    `fetched_org_count`  int                   DEFAULT '0' COMMENT '拉取组织数量',
+    `fetched_user_count` int                   DEFAULT '0' COMMENT '拉取用户数量',
+    `inserted_count`     int                   DEFAULT '0' COMMENT '新增数量（组织+用户）',
+    `updated_count`      int                   DEFAULT '0' COMMENT '更新数量（组织+用户）',
+    `disabled_count`     int                   DEFAULT '0' COMMENT '禁用数量（缺失/离职等）',
+    `skipped_count`      int                   DEFAULT '0' COMMENT '跳过数量（无变化/冲突等）',
+    `error_message`      text                  DEFAULT NULL COMMENT '错误信息',
+    PRIMARY KEY (`id`),
+    KEY                 `idx_tenant_platform_status` (`tenant_id`, `platform`, `status`),
+    KEY                 `idx_started_at` (`started_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='外部同步批次日志表';
+
+
+-- forge_admin_new.sys_external_org_map definition
+
+CREATE TABLE `sys_external_org_map`
+(
+    `id`                       bigint       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `tenant_id`                bigint       NOT NULL DEFAULT '0' COMMENT '租户编号',
+    `platform`                 varchar(50)  NOT NULL COMMENT '外部平台（weaver等）',
+    `external_org_id`          varchar(64)  NOT NULL COMMENT '外部组织ID（如deptId）',
+    `external_parent_id`       varchar(64)           DEFAULT NULL COMMENT '外部父组织ID',
+    `org_id`                   bigint       NOT NULL COMMENT '本地组织ID（sys_org.id）',
+    `name_snapshot`            varchar(255)          DEFAULT NULL COMMENT '外部组织名快照',
+    `status_snapshot`          varchar(20)           DEFAULT NULL COMMENT '外部状态快照',
+    `last_external_update_time` bigint              DEFAULT NULL COMMENT '外部更新时间（毫秒时间戳）',
+    `last_seen_batch_id`       bigint               DEFAULT NULL COMMENT '最后一次出现的同步批次ID',
+    `created_at`               datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`               datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_platform_tenant_external_org` (`tenant_id`,`platform`,`external_org_id`),
+    KEY        `idx_org_id` (`org_id`),
+    KEY        `idx_last_seen_batch` (`last_seen_batch_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='外部组织映射表（外部ID→本地sys_org.id）';
+
+
+-- forge_admin_new.sys_external_user_map definition
+
+CREATE TABLE `sys_external_user_map`
+(
+    `id`                       bigint       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `tenant_id`                bigint       NOT NULL DEFAULT '0' COMMENT '租户编号',
+    `platform`                 varchar(50)  NOT NULL COMMENT '外部平台（weaver等）',
+    `external_user_id`         varchar(64)  NOT NULL COMMENT '外部用户ID（如account）',
+    `user_id`                  bigint       NOT NULL COMMENT '本地用户ID（sys_user.id）',
+    `login_name`               varchar(100)          DEFAULT NULL COMMENT '本系统用户名（username）快照',
+    `phone_snapshot`           varchar(20)           DEFAULT NULL COMMENT '手机号快照',
+    `email_snapshot`           varchar(100)          DEFAULT NULL COMMENT '邮箱快照',
+    `dept_external_id`         varchar(64)           DEFAULT NULL COMMENT '主部门外部ID',
+    `status_snapshot`          varchar(20)           DEFAULT NULL COMMENT '外部状态快照',
+    `last_external_update_time` bigint              DEFAULT NULL COMMENT '外部更新时间（毫秒时间戳）',
+    `last_seen_batch_id`       bigint               DEFAULT NULL COMMENT '最后一次出现的同步批次ID',
+    `created_at`               datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`               datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_platform_tenant_external_user` (`tenant_id`,`platform`,`external_user_id`),
+    KEY        `idx_user_id` (`user_id`),
+    KEY        `idx_last_seen_batch` (`last_seen_batch_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='外部用户映射表（外部ID→本地sys_user.id）';
+
+
 -- forge_admin_new.worker_node definition
 
 CREATE TABLE `worker_node`
@@ -1669,7 +1742,7 @@ CREATE TABLE `worker_node`
     `TYPE`        int         NOT NULL COMMENT 'node type: ACTUAL or CONTAINER',
     `LAUNCH_DATE` date        NOT NULL COMMENT 'launch date',
     `MODIFIED`    timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'modified time',
-    `CREATED`     timestamp   NOT NULL DEFAULT '0000-00-00 00:00:00' COMMENT 'created time',
+    `CREATED` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'created time',
     PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1375 DEFAULT CHARSET=utf8mb3 COMMENT='DB WorkerID Assigner for UID Generator';
 
@@ -3035,7 +3108,7 @@ CREATE TABLE `sys_client`
     UNIQUE KEY `uk_client_code` (`client_code`),
     UNIQUE KEY `uk_app_id` (`app_id`),
     KEY                      `idx_tenant_id` (`tenant_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='客户端管理表';
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='客户端管理表';
 
 INSERT INTO sys_client (id, client_code, client_name, app_id, app_secret, token_timeout, token_activity_timeout,
                         token_prefix, token_name, concurrent_login, share_token, enable_ip_limit, ip_whitelist,
@@ -3043,6 +3116,15 @@ INSERT INTO sys_client (id, client_code, client_name, app_id, app_secret, token_
                         description, tenant_id, create_time, create_by, update_time, update_by, create_dept)
 VALUES (6, 'pc', 'PC端', 'pc', 'forage_pc123', 2592000, 7200, 'Bearer', 'Authorization', 0, 0, 0, NULL, 0, 'AES', -1,
         -1, 'password,password_captcha', 1, NULL, 1, '2026-04-08 09:37:10', 1, '2026-04-08 10:20:58', 1, 2);
+
+-- forge-report / forge-report-ui 登录默认 userClient=forge_report（与 forge-report-ui 一致，appSecret 同 PC 示例 forage_pc123）
+INSERT INTO sys_client (id, client_code, client_name, app_id, app_secret, token_timeout, token_activity_timeout,
+                        token_prefix, token_name, concurrent_login, share_token, enable_ip_limit, ip_whitelist,
+                        enable_encrypt, encrypt_algorithm, max_user_count, max_online_count, auth_types, status,
+                        description, tenant_id, create_time, create_by, update_time, update_by, create_dept)
+VALUES (7, 'forge_report', '报表/大屏', 'forge_report', 'forage_pc123', 2592000, 7200, 'Bearer', 'Authorization', 0, 0, 0,
+        NULL, 0, 'AES', -1, -1, 'password,password_captcha', 1, 'forge-report 服务客户端', 1, '2026-04-08 09:37:10', 1,
+        '2026-04-08 10:20:58', 1, 2);
 
 INSERT INTO sys_resource (id, tenant_id, resource_name, parent_id, resource_type, sort, `path`, component, is_external,
                           is_public, menu_status, visible, perms, icon, api_method, api_url, keep_alive, always_show,

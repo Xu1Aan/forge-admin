@@ -1,4 +1,14 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-npx --no-install commitlint -e 
+# Git runs hooks from the repo root; commitlint lives under forge-report-ui.
+# Resolve message file then cd so .commitlintrc.js and node_modules are found.
+if [ -f "$1" ]; then
+  msg="$1"
+else
+  msg="$(git rev-parse --show-toplevel)/$1"
+fi
+
+cd "$(dirname -- "$0")/.." || exit 1
+
+./node_modules/.bin/commitlint --edit "$msg"

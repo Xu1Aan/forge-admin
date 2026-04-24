@@ -71,3 +71,16 @@ forge:
   flow:
     client:
       url: http://127.0.0.1:8081
+
+# 外部系统同步（泛微）
+external:
+  weaver:
+    enabled: false
+    # 提供“组织+用户树形数据”的全量接口地址
+    sync-url: https://weaver.example.com/api/sync/tree
+    # 静态token（如无需鉴权可留空）
+    token: ""
+    token-header: Authorization
+    token-prefix: "Bearer "
+    # 同步写入到哪个租户（单租户可固定为1）
+    tenant-id: 1

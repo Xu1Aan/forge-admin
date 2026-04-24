@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mdframe.forge.plugin.ai.constant.AiConstants;
 import com.mdframe.forge.plugin.ai.provider.domain.AiProvider;
 import com.mdframe.forge.plugin.ai.provider.mapper.AiProviderMapper;
+import com.mdframe.forge.plugin.ai.util.OpenAiCompatibleBaseUrl;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -49,8 +50,12 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
             throw new BusinessException("Base URL 不能为空");
         }
         try {
+            String base = OpenAiCompatibleBaseUrl.normalize(provider.getBaseUrl());
+            if (!base.equals(provider.getBaseUrl().trim())) {
+                log.info("[AI供应商测试] Base URL 已规范: {} -> {}", provider.getBaseUrl(), base);
+            }
             OpenAiApi openAiApi = OpenAiApi.builder()
-                    .baseUrl(provider.getBaseUrl())
+                    .baseUrl(base)
                     .apiKey(provider.getApiKey())
                     .build();
             String model = StringUtils.hasText(provider.getDefaultModel())
@@ -68,7 +73,12 @@ public class AiProviderService extends ServiceImpl<AiProviderMapper, AiProvider>
             return chatResponse.getResult().getOutput().getText();
         } catch (Exception e) {
             log.warn("[AI供应商测试] 连接失败, provider={}, error={}", provider.getProviderName(), e.getMessage());
-            throw new BusinessException("连接失败: " + e.getMessage());
+            String detail = e.getMessage();
+            if (detail != null && detail.contains("404")) {
+                detail = detail + "。请确认 Base URL 未重复包含 /v1（框架会拼接 /v1/chat/completions）；"
+                        + "例如通义: https://dashscope.aliyuncs.com/compatible-mode，OpenAI: https://api.openai.com";
+            }
+            throw new BusinessException("连接失败: " + detail);
         }
     }
 

@@ -1,0 +1,27 @@
+{
+  "children": [
+    {
+      "account": "A000884",
+      "deptId": "2",
+      "deptName": "办公室",
+      "mobile": "13808219375",
+      "email": "",
+      "name": "王刚强",
+      "nodeType": "user",
+      "status": "1",
+      "updateTime": 1776670156107
+    },
+    {
+      "account": "A000893",
+      "deptId": "2",
+      "deptName": "办公室",
+      "mobile": "13800000000",
+      "email": "boss@example.com",
+      "name": "汪涛",
+      "nodeType": "user",
+      "status": "1",
+      "updateTime": 1776670156108
+    }
+  ]
+}
+

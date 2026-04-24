@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.ai.client;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.mdframe.forge.plugin.ai.provider.domain.AiProvider;
+import com.mdframe.forge.plugin.ai.util.OpenAiCompatibleBaseUrl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -50,7 +51,7 @@ public class ChatClientCache {
                                        String sessionId,
                                        org.springframework.ai.chat.memory.ChatMemory chatMemory) {
         OpenAiApi openAiApi = OpenAiApi.builder()
-                .baseUrl(provider.getBaseUrl())
+                .baseUrl(OpenAiCompatibleBaseUrl.normalize(provider.getBaseUrl()))
                 .apiKey(provider.getApiKey())
                 .build();
         ChatModel chatModel = OpenAiChatModel.builder()
