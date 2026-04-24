@@ -86,7 +86,11 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-job</artifactId>
+        </dependency>
+
     </dependencies>
     
 

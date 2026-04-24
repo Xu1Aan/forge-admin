@@ -1,11 +1,13 @@
 package com.mdframe.forge.plugin.message.domain.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 /**
  * 消息查询请求DTO
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class MessageQueryDTO {
     
     /**

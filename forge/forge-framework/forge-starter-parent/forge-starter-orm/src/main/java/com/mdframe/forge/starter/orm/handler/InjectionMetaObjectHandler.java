@@ -68,8 +68,13 @@ public class InjectionMetaObjectHandler implements MetaObjectHandler {
             if (ObjectUtil.isNotNull(metaObject) && metaObject.getOriginalObject() instanceof BaseEntity baseEntity) {
                 // 获取当前时间作为更新时间，无论原始对象中的更新时间是否为空都填充
                 baseEntity.setUpdateTime(current);
-                // 获取当前登录用户的ID，并填充更新人信息
-                Long userId = SessionHelper.getUserId();
+                // 获取当前登录用户的ID，并填充更新人信息（异步/非Web场景可能取不到请求上下文，需降级）
+                Long userId = null;
+                try {
+                    userId = SessionHelper.getUserId();
+                } catch (Exception e) {
+                    log.warn("自动注入警告 => 非 web 上下文无法获取当前用户，跳过 updateBy 填充");
+                }
                 if (ObjectUtil.isNotNull(userId)) {
                     baseEntity.setUpdateBy(userId);
                 }

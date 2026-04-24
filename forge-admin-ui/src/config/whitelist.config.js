@@ -2,6 +2,7 @@
 export const WHITE_LIST = [
   '/login',
   '/login/callback',
+  '/login/weaver-callback',
   '/404',
 ]
 

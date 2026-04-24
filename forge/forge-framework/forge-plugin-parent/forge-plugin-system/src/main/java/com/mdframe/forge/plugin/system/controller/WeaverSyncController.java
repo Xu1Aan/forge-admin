@@ -28,11 +28,11 @@ public class WeaverSyncController {
     private final SysExternalSyncBatchMapper batchMapper;
 
     /**
-     * 触发一次全量差分同步（手动）
+     * 提交一次全量差分同步（手动）：立即返回 running 与 batchId，实际拉取与写库在后台执行；进度与结果以批次表为准。
      */
     @PostMapping("/sync")
     public RespInfo<WeaverSyncResult> sync() {
-        WeaverSyncResult result = syncService.syncFull("manual");
+        WeaverSyncResult result = syncService.startAsyncWeaverSync();
         return RespInfo.success(result);
     }
 

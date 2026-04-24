@@ -72,15 +72,43 @@ forge:
     client:
       url: http://127.0.0.1:8081
 
+  # 泛微 SSO（三方登录）
+  sso:
+    weaver:
+      enabled: false
+      # OA SSO 基础地址（不含末尾 /），例如：http://127.0.0.1:8809
+      base-url: ""
+      client-id: ""
+      # 建议通过环境变量注入，勿提交仓库
+      client-secret: ""
+      # 后端回调地址（需与泛微后台配置一致）
+      redirect-uri: ""
+      # state 有效期（秒）
+      state-ttl-seconds: 300
+
 # 外部系统同步（泛微）
 external:
   weaver:
-    enabled: false
-    # 提供“组织+用户树形数据”的全量接口地址
-    sync-url: https://weaver.example.com/api/sync/tree
-    # 静态token（如无需鉴权可留空）
+    enabled: true
+    # 响应体形态：tree_children（{children:[]}）| flat_data（{data:[]}，如 getUsersInfo）
+    sync-payload-type: flat_data
+    # 全量接口地址（flat 示例：http://内网:8520/api/getUsersInfo）
+    sync-url: http://10.20.124.12:8520/api/getUsersInfo
+    http-method: POST
+    # 整段 Authorization（与下面 token 二选一，优先整段；密钥用环境变量，勿提交仓库）
+    authorization-header-name: authorization
+    authorization-header-value: $2a$10$B4hlkQR1AvcjOgrEuQAIROMOi4wWJKyr39GG.bpdb53rwQ5EPLvDCswhi@2023
+    # 静态 token（Bearer 等场景）
     token: ""
     token-header: Authorization
     token-prefix: "Bearer "
+    # workcode 为空时是否用 resource_id 作为外部主键（默认 false）
+    workcode-fallback-to-resource-id: false
+    # 部门名称含此子串则同步为禁用组织
+    org-disabled-name-contains: "已封存"
+    # 泛微人员 status 数字 -> 本系统 userStatus（0/1/2）
+    user-status-map:
+      "1": 1
+      "6": 0
     # 同步写入到哪个租户（单租户可固定为1）
     tenant-id: 1

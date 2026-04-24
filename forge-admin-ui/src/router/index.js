@@ -17,6 +17,12 @@ export const manualRoutes = [
     meta: { title: '社交登录回调', layout: 'empty' },
   },
   {
+    name: 'WeaverCallback',
+    path: '/login/weaver-callback',
+    component: () => import('@/views/login/weaver-callback.vue'),
+    meta: { title: '泛微登录回调', layout: 'empty' },
+  },
+  {
     name: '404',
     path: '/404',
     component: () => import('@/views/error-page/404.vue'),

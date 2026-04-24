@@ -2,11 +2,12 @@ package com.mdframe.forge.plugin.system.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.mdframe.forge.starter.core.domain.BaseEntity;
 import com.mdframe.forge.starter.tenant.core.TenantEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -64,6 +65,41 @@ public class SysUser extends TenantEntity {
      * 性别（0-未知，1-男，2-女）
      */
     private Integer gender;
+
+    /**
+     * 生日
+     */
+    private LocalDate birthday;
+
+    /**
+     * 籍贯
+     */
+    private String nativePlace;
+
+    /**
+     * 教育程度（外部码值）
+     */
+    private Integer educationLevel;
+
+    /**
+     * 参加工作日期
+     */
+    private LocalDate workStartDate;
+
+    /**
+     * 入司日期
+     */
+    private LocalDate companyStartDate;
+
+    /**
+     * 工作年限（年）
+     */
+    private BigDecimal workYear;
+
+    /**
+     * 司龄（年）
+     */
+    private BigDecimal companyWorkYear;
 
     /**
      * 密码（加密存储）

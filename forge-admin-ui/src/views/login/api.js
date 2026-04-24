@@ -36,4 +36,10 @@ export default {
 
   // 三方登录回调处理
   socialCallback: data => request.post('/social/callback', data, { needToken: false }),
+
+  // 泛微SSO回调（后端完成 token/profile 并签发系统token）
+  weaverCallback: params => request.get('/sso/weaver/callback', {
+    needToken: false,
+    params,
+  }),
 }

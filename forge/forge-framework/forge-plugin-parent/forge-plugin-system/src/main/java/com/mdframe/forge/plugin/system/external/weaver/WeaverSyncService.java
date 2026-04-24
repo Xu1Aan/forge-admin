@@ -1,6 +1,6 @@
 package com.mdframe.forge.plugin.system.external.weaver;
 
-import cn.hutool.core.util.StrUtil;
+import cn.hutool.core.util.RandomUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.mdframe.forge.plugin.system.entity.*;
 import com.mdframe.forge.plugin.system.external.weaver.model.ExternalOrg;
@@ -10,9 +10,14 @@ import com.mdframe.forge.starter.auth.util.PasswordUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -36,8 +41,64 @@ public class WeaverSyncService {
     private final SysUserMapper sysUserMapper;
     private final SysUserOrgMapper sysUserOrgMapper;
 
+    private final WeaverSyncTransactionHelper transactionHelper;
+    private final WeaverSyncAsyncExecutor weaverAsyncExecutor;
+
+    private WeaverSyncService self;
+
+    @Autowired
+    @Lazy
+    public void setSelf(WeaverSyncService self) {
+        this.self = self;
+    }
+
     /**
-     * 手动/定时触发同步（单租户版本）
+     * 手动触发：仅提交批次并立即返回；实际拉取与写库在后台线程执行。结果请查批次表或轮询同接口分页。
+     */
+    public WeaverSyncResult startAsyncWeaverSync() {
+        Long tenantId = properties.getTenantId();
+        if (tenantId == null) tenantId = 1L;
+
+        // 并发控制：同一租户同一平台若已有 running 批次，直接返回该批次，避免重复并行拉取
+        SysExternalSyncBatch running = batchMapper.selectOne(new LambdaQueryWrapper<SysExternalSyncBatch>()
+                .eq(SysExternalSyncBatch::getTenantId, tenantId)
+                .eq(SysExternalSyncBatch::getPlatform, PLATFORM)
+                .eq(SysExternalSyncBatch::getStatus, "running")
+                .orderByDesc(SysExternalSyncBatch::getStartedAt)
+                .last("limit 1"));
+        if (running != null) {
+            WeaverSyncResult r = new WeaverSyncResult();
+            r.setBatchId(running.getId());
+            r.setStatus("running");
+            return r;
+        }
+
+        SysExternalSyncBatch b = transactionHelper.insertRunningBatch("manual");
+        weaverAsyncExecutor.runAsyncWeaverSync(b.getId());
+        WeaverSyncResult r = new WeaverSyncResult();
+        r.setBatchId(b.getId());
+        r.setStatus("running");
+        return r;
+    }
+
+    /**
+     * 后台任务入口：在独立事务中执行同步，失败时另开事务将批次标为 failed。
+     */
+    public void executeWeaverSyncByIdAfterSubmit(Long batchId) {
+        try {
+            self.runSyncWorkTransactional(batchId);
+        } catch (Exception e) {
+            log.error("Weaver 同步失败 batchId={}", batchId, e);
+            try {
+                transactionHelper.markBatchFailed(batchId, e.getMessage());
+            } catch (Exception ex) {
+                log.error("Weaver 无法写入失败状态 batchId={}", batchId, ex);
+            }
+        }
+    }
+
+    /**
+     * 定时任务等同路径：整段仍在一个事务内，失败时整批与写库回滚（与仅插入 running 的异步模式不同）。
      */
     @Transactional(rollbackFor = Exception.class)
     public WeaverSyncResult syncFull(String triggerType) {
@@ -52,55 +113,110 @@ public class WeaverSyncService {
         batch.setStartedAt(LocalDateTime.now());
         batchMapper.insert(batch);
 
+        return self.runSyncWorkTransactional(batch.getId());
+    }
+
+    /**
+     * 核心同步逻辑。由 {@link #syncFull} 在同事务内调用，或由 {@link #executeWeaverSyncByIdAfterSubmit} 在独立事务中调用。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public WeaverSyncResult runSyncWorkTransactional(Long batchId) {
+        SysExternalSyncBatch batch = batchMapper.selectById(batchId);
+        if (batch == null) {
+            throw new IllegalStateException("同步批次不存在: " + batchId);
+        }
+        if (!"running".equals(batch.getStatus())) {
+            log.info("Weaver 同步跳过，批次已非 running: batchId={} status={}", batchId, batch.getStatus());
+            WeaverSyncResult r = new WeaverSyncResult();
+            r.setBatchId(batchId);
+            r.setStatus(batch.getStatus());
+            return r;
+        }
+        Long tenantId = batch.getTenantId();
+        if (tenantId == null) {
+            tenantId = 1L;
+        }
+        final Long tenant = tenantId;
+
+        WeaverClient.Snapshot snapshot = weaverClient.fetchSnapshot();
+        batch.setRawSnapshotHash(snapshot.getRawHash());
+
+        List<ExternalOrg> orgs = snapshot.getOrgs() != null ? snapshot.getOrgs() : List.of();
+        List<ExternalUser> users = snapshot.getUsers() != null ? new ArrayList<>(snapshot.getUsers()) : new ArrayList<>();
+        batch.setFetchedOrgCount(orgs.size());
+        batch.setFetchedUserCount(users.size());
+
+        SyncCounters counters = new SyncCounters();
+        StringBuilder syncNotes = new StringBuilder();
+        if (snapshot.getFlatSkippedNoExternalUserId() > 0) {
+            int n = snapshot.getFlatSkippedNoExternalUserId();
+            counters.skipped += n;
+            syncNotes.append("无工号且未回退 resource_id 的 user 行:").append(n).append(";");
+        }
+        users = dedupeUsersByExternalId(users, counters, syncNotes);
+
+        Map<String, Long> externalOrgIdToLocalOrgId = upsertOrgs(tenant, batch.getId(), orgs, counters);
+        upsertUsers(tenant, batch.getId(), users, externalOrgIdToLocalOrgId, counters);
+
+        reconcileMissingUsers(tenant, batch.getId(), counters);
+
+        batch.setInsertedCount(counters.inserted);
+        batch.setUpdatedCount(counters.updated);
+        batch.setDisabledCount(counters.disabled);
+        batch.setSkippedCount(counters.skipped);
+        if (syncNotes.length() > 0) {
+            batch.setErrorMessage(syncNotes.toString());
+            batch.setStatus("partial");
+        } else {
+            batch.setStatus("success");
+        }
+        batch.setEndedAt(LocalDateTime.now());
+        batchMapper.updateById(batch);
+
         WeaverSyncResult result = new WeaverSyncResult();
         result.setBatchId(batch.getId());
+        result.setStatus(batch.getStatus());
+        result.setFetchedOrgCount(batch.getFetchedOrgCount());
+        result.setFetchedUserCount(batch.getFetchedUserCount());
+        result.setInsertedCount(counters.inserted);
+        result.setUpdatedCount(counters.updated);
+        result.setDisabledCount(counters.disabled);
+        result.setSkippedCount(counters.skipped);
+        return result;
+    }
 
-        try {
-            WeaverClient.Snapshot snapshot = weaverClient.fetchSnapshot();
-            batch.setRawSnapshotHash(snapshot.getRawHash());
-
-            List<ExternalOrg> orgs = snapshot.getOrgs() != null ? snapshot.getOrgs() : List.of();
-            List<ExternalUser> users = snapshot.getUsers() != null ? snapshot.getUsers() : List.of();
-            batch.setFetchedOrgCount(orgs.size());
-            batch.setFetchedUserCount(users.size());
-
-            SyncCounters counters = new SyncCounters();
-
-            Map<String, Long> externalOrgIdToLocalOrgId = upsertOrgs(tenantId, batch.getId(), orgs, counters);
-            upsertUsers(tenantId, batch.getId(), users, externalOrgIdToLocalOrgId, counters);
-
-            reconcileMissingUsers(tenantId, batch.getId(), counters);
-            // 组织的 missing 先不做禁用：组织禁用可能影响大量用户；可后续加配置项
-
-            batch.setInsertedCount(counters.inserted);
-            batch.setUpdatedCount(counters.updated);
-            batch.setDisabledCount(counters.disabled);
-            batch.setSkippedCount(counters.skipped);
-            batch.setStatus("success");
-            batch.setEndedAt(LocalDateTime.now());
-            batchMapper.updateById(batch);
-
-            result.setStatus(batch.getStatus());
-            result.setFetchedOrgCount(batch.getFetchedOrgCount());
-            result.setFetchedUserCount(batch.getFetchedUserCount());
-            result.setInsertedCount(counters.inserted);
-            result.setUpdatedCount(counters.updated);
-            result.setDisabledCount(counters.disabled);
-            result.setSkippedCount(counters.skipped);
-            return result;
-        } catch (Exception e) {
-            log.error("Weaver 同步失败 batchId={}", batch.getId(), e);
-            batch.setStatus("failed");
-            batch.setErrorMessage(e.getMessage());
-            batch.setEndedAt(LocalDateTime.now());
-            batchMapper.updateById(batch);
-            result.setStatus("failed");
-            throw e;
+    /**
+     * 同一批次内重复 externalUserId（工号）只保留首次出现，其余计入 skipped
+     */
+    private List<ExternalUser> dedupeUsersByExternalId(List<ExternalUser> users, SyncCounters counters, StringBuilder syncNotes) {
+        if (users == null || users.isEmpty()) {
+            return users;
         }
+        Map<String, ExternalUser> first = new LinkedHashMap<>();
+        int dup = 0;
+        for (ExternalUser u : users) {
+            String key = u.getExternalUserId();
+            if (StringUtils.isBlank(key)) {
+                continue;
+            }
+            if (first.containsKey(key)) {
+                dup++;
+                counters.skipped++;
+            } else {
+                first.put(key, u);
+            }
+        }
+        if (dup > 0) {
+            syncNotes.append("批次内重复工号跳过:").append(dup).append(";");
+        }
+        return new ArrayList<>(first.values());
     }
 
     private Map<String, Long> upsertOrgs(Long tenantId, Long batchId, List<ExternalOrg> orgs, SyncCounters counters) {
         if (orgs == null || orgs.isEmpty()) return new HashMap<>();
+
+        // 根公司节点：所有顶级部门统一挂到公司下
+        Long rootCompanyOrgId = ensureRootCompanyOrg(tenantId);
 
         // preload mapping
         List<SysExternalOrgMap> existingMaps = orgMapMapper.selectList(new LambdaQueryWrapper<SysExternalOrgMap>()
@@ -117,13 +233,14 @@ public class WeaverSyncService {
             SysExternalOrgMap map = byExternalId.get(ext.getExternalOrgId());
 
             if (map == null) {
-                // create org
+                // create org（租户内 org_name 唯一，泛微不同路径可同名，需去重）
                 SysOrg org = new SysOrg();
                 org.setTenantId(tenantId);
-                org.setOrgName(StringUtils.defaultIfBlank(ext.getName(), ext.getExternalOrgId()));
+                String baseName = StringUtils.defaultIfBlank(ext.getName(), ext.getExternalOrgId());
+                org.setOrgName(resolveUniqueOrgName(tenantId, baseName, ext.getExternalOrgId(), null));
                 org.setOrgType(2);
                 org.setOrgStatus(parseOrgStatus(ext.getStatus()));
-                org.setSort(0);
+                org.setSort(ext.getSort() != null ? ext.getSort() : 0);
                 org.setParentId(0L); // parent/ancestors 后续二次修正
                 org.setAncestors("0");
                 sysOrgMapper.insert(org);
@@ -160,8 +277,12 @@ public class WeaverSyncService {
 
                 SysOrg org = sysOrgMapper.selectById(map.getOrgId());
                 if (org != null) {
-                    org.setOrgName(StringUtils.defaultIfBlank(ext.getName(), org.getOrgName()));
+                    String baseName = StringUtils.defaultIfBlank(ext.getName(), org.getOrgName());
+                    org.setOrgName(resolveUniqueOrgName(tenantId, baseName, ext.getExternalOrgId(), org.getId()));
                     org.setOrgStatus(parseOrgStatus(ext.getStatus()));
+                    if (ext.getSort() != null) {
+                        org.setSort(ext.getSort());
+                    }
                     sysOrgMapper.updateById(org);
                 }
 
@@ -182,7 +303,7 @@ public class WeaverSyncService {
             SysOrg org = sysOrgMapper.selectById(map.getOrgId());
             if (org == null) continue;
 
-            Long parentLocalId = 0L;
+            Long parentLocalId = rootCompanyOrgId != null ? rootCompanyOrgId : 0L;
             if (StringUtils.isNotBlank(ext.getExternalParentId())) {
                 SysExternalOrgMap parentMap = byExternalId.get(ext.getExternalParentId());
                 if (parentMap != null) parentLocalId = parentMap.getOrgId();
@@ -200,6 +321,76 @@ public class WeaverSyncService {
         }
 
         return externalOrgIdToLocalOrgId;
+    }
+
+    private Long ensureRootCompanyOrg(Long tenantId) {
+        String name = StringUtils.trimToEmpty(properties.getRootCompanyName());
+        if (StringUtils.isBlank(name)) {
+            name = "XX公司";
+        }
+        // 尽量复用现有 company 组织：orgType=1 且同名
+        SysOrg existing = sysOrgMapper.selectOne(new LambdaQueryWrapper<SysOrg>()
+                .eq(SysOrg::getTenantId, tenantId)
+                .eq(SysOrg::getOrgType, 1)
+                .eq(SysOrg::getOrgName, name)
+                .last("limit 1"));
+        if (existing != null) {
+            // 确保它是顶级
+            if (existing.getParentId() == null || existing.getParentId() != 0L) {
+                existing.setParentId(0L);
+                existing.setAncestors("0");
+                sysOrgMapper.updateById(existing);
+            } else if (StringUtils.isBlank(existing.getAncestors())) {
+                existing.setAncestors("0");
+                sysOrgMapper.updateById(existing);
+            }
+            return existing.getId();
+        }
+
+        SysOrg org = new SysOrg();
+        org.setTenantId(tenantId);
+        org.setOrgName(resolveUniqueOrgName(tenantId, name, "weaver_root_company", null));
+        org.setOrgType(1);
+        org.setOrgStatus(1);
+        org.setSort(0);
+        org.setParentId(0L);
+        org.setAncestors("0");
+        sysOrgMapper.insert(org);
+        return org.getId();
+    }
+
+    /**
+     * 满足 uk_tenant_org_name：同租户下 org_name 唯一。泛微侧不同 department 可能同名，冲突时在名称后附加「（外部id）」。
+     */
+    private String resolveUniqueOrgName(Long tenantId, String baseName, String externalOrgId, Long existingLocalOrgId) {
+        String name = StringUtils.trimToEmpty(baseName);
+        if (StringUtils.isBlank(name)) {
+            name = StringUtils.defaultIfBlank(externalOrgId, "weaver-org");
+        }
+        if (isOrgNameAvailable(tenantId, name, existingLocalOrgId)) {
+            return name;
+        }
+        String suffix = StringUtils.isNotBlank(externalOrgId) ? externalOrgId : UUID.randomUUID().toString();
+        String disambiguated = name + "（" + suffix + "）";
+        int n = 0;
+        while (!isOrgNameAvailable(tenantId, disambiguated, existingLocalOrgId) && n < 32) {
+            n++;
+            disambiguated = name + "（" + suffix + "-" + n + "）";
+        }
+        return disambiguated;
+    }
+
+    private boolean isOrgNameAvailable(Long tenantId, String orgName, Long excludeLocalOrgId) {
+        if (StringUtils.isBlank(orgName)) {
+            return false;
+        }
+        LambdaQueryWrapper<SysOrg> q = new LambdaQueryWrapper<SysOrg>()
+                .eq(SysOrg::getTenantId, tenantId)
+                .eq(SysOrg::getOrgName, orgName);
+        if (excludeLocalOrgId != null) {
+            q.ne(SysOrg::getId, excludeLocalOrgId);
+        }
+        return sysOrgMapper.selectCount(q) == 0;
     }
 
     private void upsertUsers(Long tenantId, Long batchId, List<ExternalUser> users, Map<String, Long> orgIdMap, SyncCounters counters) {
@@ -227,12 +418,22 @@ public class WeaverSyncService {
                 u.setTenantId(tenantId);
                 u.setUsername(username);
                 u.setRealName(ext.getName());
-                u.setPhone(ext.getMobile());
+                u.setPhone(chooseUserPhone(ext));
                 u.setEmail(ext.getEmail());
+                u.setIdCard(normalizeIdCard(ext.getIdCard()));
+                u.setGender(mapGender(ext.getSex()));
+                u.setBirthday(parseLocalDate(ext.getBirthday()));
+                u.setNativePlace(StringUtils.trimToNull(ext.getNativePlace()));
+                u.setEducationLevel(ext.getEducationLevel());
+                u.setWorkStartDate(parseLocalDate(ext.getWorkStartDate()));
+                u.setCompanyStartDate(parseLocalDate(ext.getCompanyStartDate()));
+                u.setWorkYear(toBigDecimal(ext.getWorkYear()));
+                u.setCompanyWorkYear(toBigDecimal(ext.getCompanyWorkYear()));
                 u.setUserType(2);
-                u.setUserStatus(parseUserStatus(ext.getStatus()));
-                // 初始密码：随机（避免与泛微密码耦合）；可后续接SSO
-                u.setPassword(PasswordUtil.encrypt(StrUtil.randomString(16)));
+                u.setUserStatus(mapExternalUserStatus(ext.getStatus()));
+                u.setRemark(buildEcologyRemark(ext.getResourceId()));
+                // 初始密码：默认与手机号相同（无手机时随机，避免空密码）
+                u.setPassword(PasswordUtil.encrypt(initialPasswordPlain(ext)));
                 sysUserMapper.insert(u);
 
                 SysExternalUserMap newMap = new SysExternalUserMap();
@@ -241,7 +442,7 @@ public class WeaverSyncService {
                 newMap.setExternalUserId(ext.getExternalUserId());
                 newMap.setUserId(u.getId());
                 newMap.setLoginName(username);
-                newMap.setPhoneSnapshot(ext.getMobile());
+                newMap.setPhoneSnapshot(chooseUserPhone(ext));
                 newMap.setEmailSnapshot(ext.getEmail());
                 newMap.setDeptExternalId(ext.getDeptExternalId());
                 newMap.setStatusSnapshot(ext.getStatus());
@@ -288,15 +489,27 @@ public class WeaverSyncService {
             }
 
             u.setRealName(ext.getName());
-            u.setPhone(ext.getMobile());
+            u.setPhone(chooseUserPhone(ext));
             u.setEmail(ext.getEmail());
-            u.setUserStatus(parseUserStatus(ext.getStatus()));
+            u.setIdCard(normalizeIdCard(ext.getIdCard()));
+            u.setGender(mapGender(ext.getSex()));
+            u.setBirthday(parseLocalDate(ext.getBirthday()));
+            u.setNativePlace(StringUtils.trimToNull(ext.getNativePlace()));
+            u.setEducationLevel(ext.getEducationLevel());
+            u.setWorkStartDate(parseLocalDate(ext.getWorkStartDate()));
+            u.setCompanyStartDate(parseLocalDate(ext.getCompanyStartDate()));
+            u.setWorkYear(toBigDecimal(ext.getWorkYear()));
+            u.setCompanyWorkYear(toBigDecimal(ext.getCompanyWorkYear()));
+            u.setUserStatus(mapExternalUserStatus(ext.getStatus()));
+            if (StringUtils.isNotBlank(ext.getResourceId())) {
+                u.setRemark(buildEcologyRemark(ext.getResourceId()));
+            }
             sysUserMapper.updateById(u);
 
             bindMainOrg(tenantId, u.getId(), ext.getDeptExternalId(), orgIdMap);
 
             map.setLoginName(u.getUsername());
-            map.setPhoneSnapshot(ext.getMobile());
+            map.setPhoneSnapshot(chooseUserPhone(ext));
             map.setEmailSnapshot(ext.getEmail());
             map.setDeptExternalId(ext.getDeptExternalId());
             map.setStatusSnapshot(ext.getStatus());
@@ -321,6 +534,59 @@ public class WeaverSyncService {
             sysUserMapper.updateById(u);
             counters.disabled++;
         }
+    }
+
+    /**
+     * 手机号优先级：mobile_effective > mobile > telephone
+     */
+    private static String chooseUserPhone(ExternalUser ext) {
+        String v = StringUtils.trimToNull(ext.getMobileEffective());
+        if (v != null) return v;
+        v = StringUtils.trimToNull(ext.getMobile());
+        if (v != null) return v;
+        return StringUtils.trimToNull(ext.getTelephone());
+    }
+
+    /**
+     * 性别映射：泛微侧常见 0=男 1=女；本系统 gender: 0=未知 1=男 2=女
+     */
+    private static Integer mapGender(String sex) {
+        String s = StringUtils.trimToEmpty(sex);
+        if ("0".equals(s)) return 1;
+        if ("1".equals(s)) return 2;
+        return 0;
+    }
+
+    /**
+     * 证件号清洗与长度保护：去空白、转大写，超长时截断，避免写库失败。
+     * 说明：本系统字段名叫 id_card，但外部可能传护照/其他证件号，长度不一定为18。
+     */
+    private static String normalizeIdCard(String raw) {
+        String v = StringUtils.trimToNull(raw);
+        if (v == null) return null;
+        v = v.replaceAll("\\s+", "").toUpperCase();
+        // MySQL 列已扩到 varchar(32)，这里再兜底一次
+        if (v.length() > 32) {
+            v = v.substring(0, 32);
+        }
+        return v;
+    }
+
+    private static LocalDate parseLocalDate(String yyyyMMdd) {
+        String s = StringUtils.trimToEmpty(yyyyMMdd);
+        if (StringUtils.isBlank(s)) return null;
+        try {
+            // 期望格式：yyyy-MM-dd
+            return LocalDate.parse(s);
+        } catch (Exception ignore) {
+            return null;
+        }
+    }
+
+    private static BigDecimal toBigDecimal(Double v) {
+        if (v == null) return null;
+        // 避免二进制浮点误差扩大：保留两位小数
+        return BigDecimal.valueOf(v).setScale(2, RoundingMode.HALF_UP);
     }
 
     private void bindMainOrg(Long tenantId, Long userId, String deptExternalId, Map<String, Long> orgIdMap) {
@@ -358,17 +624,54 @@ public class WeaverSyncService {
         return extUpdate > lastUpdate;
     }
 
-    private static int parseUserStatus(String status) {
-        return "1".equals(StringUtils.trimToEmpty(status)) ? 1 : 0;
+    private int mapExternalUserStatus(String status) {
+        String s = StringUtils.trimToEmpty(status);
+        if (properties.getUserStatusMap() != null && properties.getUserStatusMap().containsKey(s)) {
+            Integer v = properties.getUserStatusMap().get(s);
+            return v != null ? v : 0;
+        }
+        if ("1".equals(s)) {
+            return 1;
+        }
+        try {
+            if (s.matches("-?\\d+")) {
+                int n = Integer.parseInt(s);
+                if (n == 1) {
+                    return 1;
+                }
+            }
+        } catch (NumberFormatException ignored) {
+            // fall through
+        }
+        return 0;
+    }
+
+    private static String buildEcologyRemark(String resourceId) {
+        if (StringUtils.isBlank(resourceId)) {
+            return null;
+        }
+        String r = "ecology:rid=" + resourceId.trim();
+        return r.length() > 500 ? r.substring(0, 500) : r;
     }
 
     private static int parseOrgStatus(String status) {
         return "1".equals(StringUtils.trimToEmpty(status)) ? 1 : 0;
     }
 
+    /**
+     * 同步新建用户时的初始密码明文：与手机号一致；无手机时随机生成，避免违反非空约束。
+     */
+    private static String initialPasswordPlain(ExternalUser ext) {
+        String phone = StringUtils.trimToEmpty(chooseUserPhone(ext));
+        if (StringUtils.isNotBlank(phone)) {
+            return phone;
+        }
+        return RandomUtil.randomString(16);
+    }
+
     private String chooseUsername(ExternalUser ext) {
-        String mobile = StringUtils.trimToEmpty(ext.getMobile());
-        if (StringUtils.isNotBlank(mobile)) return mobile;
+        String phone = StringUtils.trimToEmpty(chooseUserPhone(ext));
+        if (StringUtils.isNotBlank(phone)) return phone;
         String email = StringUtils.trimToEmpty(ext.getEmail());
         if (StringUtils.isNotBlank(email)) return email;
         return PLATFORM + "_" + ext.getExternalUserId();

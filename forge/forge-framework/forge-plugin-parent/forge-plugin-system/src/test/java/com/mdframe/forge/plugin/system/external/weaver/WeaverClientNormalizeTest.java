@@ -38,6 +38,7 @@ class WeaverClientNormalizeTest {
         assertEquals("办公室", r.getOrgs().get(0).getName());
         assertEquals("A000884", r.getUsers().get(0).getExternalUserId());
         assertEquals("2", r.getUsers().get(0).getDeptExternalId());
+        assertEquals(0, r.getSkippedNoExternalUserId());
     }
 
     @Test
@@ -60,6 +61,7 @@ class WeaverClientNormalizeTest {
         assertEquals(2, r.getOrgs().size());
         assertTrue(r.getOrgs().stream().anyMatch(o -> "1".equals(o.getExternalOrgId()) && "总部".equals(o.getName())));
         assertTrue(r.getOrgs().stream().anyMatch(o -> "2".equals(o.getExternalOrgId()) && "办公室".equals(o.getName()) && "1".equals(o.getExternalParentId())));
+        assertEquals(0, r.getSkippedNoExternalUserId());
     }
 }
 

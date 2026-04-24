@@ -34,6 +34,8 @@ public class SaTokenConfig implements WebMvcConfigurer {
             SaRouter.match("/**")
                     // 排除登录接口（统一入口）
                     .notMatch("/auth/login")
+                    // 排除泛微 SSO 登录（回调）
+                    .notMatch("/sso/weaver/**")
                     // 排除注册接口
                     .notMatch("/auth/register")
                     // 排除重置密码接口
@@ -57,6 +59,8 @@ public class SaTokenConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 // 排除登录相关接口
                 .excludePathPatterns("/auth/login", "/auth/register", "/auth/resetPassword", "/auth/captcha")
+                // 排除泛微 SSO 登录（回调）
+                .excludePathPatterns("/sso/weaver/**")
                 // 排除静态资源
                 .excludePathPatterns("/static/**", "/css/**", "/js/**", "/images/**")
                 // 排除Swagger文档

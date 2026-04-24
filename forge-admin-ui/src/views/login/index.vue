@@ -238,8 +238,8 @@
               <i v-if="!loading" class="button-icon ai-icon:arrow-right" />
             </n-button>
 
-            <!-- Social login buttons -->
-            <div v-if="socialPlatforms.length > 0" class="social-login-section">
+            <!-- Social/SSO login buttons -->
+            <div v-if="showOtherLogin" class="social-login-section">
               <div class="social-divider">
                 <span class="divider-text">其他登录方式</span>
               </div>
@@ -258,6 +258,15 @@
                     class="social-icon"
                   >
                   <i v-else class="social-icon-fallback ai-icon:link" />
+                </button>
+
+                <!-- Weaver SSO -->
+                <button
+                  class="social-button"
+                  title="泛微SSO登录"
+                  @click="handleWeaverLogin()"
+                >
+                  <i class="social-icon-fallback ai-icon:building" />
                 </button>
               </div>
             </div>
@@ -376,6 +385,8 @@ const loading = ref(false)
 // 三方登录平台列表
 const socialPlatforms = ref([])
 const socialLoading = ref(false)
+const weaverSsoEnabled = ref(import.meta.env.VITE_WEAVER_SSO_ENABLED !== 'false')
+const showOtherLogin = computed(() => socialPlatforms.value.length > 0 || weaverSsoEnabled.value)
 
 // 手机号验证
 const isValidPhone = computed(() => {
@@ -452,6 +463,42 @@ async function handleSocialLogin(platform) {
     console.error('获取三方授权链接失败:', error)
     $message.error('获取授权链接失败')
   }
+}
+
+function buildAuthorizeUrl(path, params = {}) {
+  const prefix = import.meta.env.VITE_REQUEST_PREFIX || ''
+  const p = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
+  const fullPath = path.startsWith('/') ? path : `/${path}`
+  const url = new URL(`${window.location.origin}${p}${fullPath}`)
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '')
+      url.searchParams.set(k, String(v))
+  })
+  return url.toString()
+}
+
+// Weaver SSO 登录（后端负责跳转到 OA）
+function handleWeaverLogin() {
+  if (!weaverSsoEnabled.value) {
+    $message.warning('泛微SSO未启用')
+    return
+  }
+  const width = 600
+  const height = 600
+  const left = (window.innerWidth - width) / 2
+  const top = (window.innerHeight - height) / 2
+
+  // redirect_uri 需在后端配置为前端回调页：/#/login/weaver-callback
+  const authUrl = buildAuthorizeUrl('/sso/weaver/authorize', {
+    tenantId: route.query.tenantId,
+    userClient: 'pc',
+  })
+
+  window.open(
+    authUrl,
+    'weaver_sso_auth',
+    `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,resizable=yes`,
+  )
 }
 
 // 根据验证码类型加载验证码
@@ -812,6 +859,11 @@ onMounted(() => {
   loadSocialPlatforms()
   // 监听三方登录消息
   window.addEventListener('message', handleSocialLoginMessage)
+
+  // 兼容泛微 wui service 回跳：/login?ticket=ST-xxx&redirect=/home
+  if (route.query?.ticket) {
+    handleWeaverTicketLogin()
+  }
 })
 
 // 组件卸载时清理定时器
@@ -822,6 +874,40 @@ onUnmounted(() => {
   // 移除消息监听
   window.removeEventListener('message', handleSocialLoginMessage)
 })
+
+async function handleWeaverTicketLogin() {
+  if (!weaverSsoEnabled.value)
+    return
+  try {
+    loading.value = true
+    $message.loading('正在使用泛微票据登录...', { key: 'login' })
+
+    const { ticket, redirect } = route.query
+    const res = await api.weaverCallback({
+      ticket,
+      tenantId: route.query.tenantId,
+      userClient: 'pc',
+    })
+
+    if (res.code !== 200 || !res.data) {
+      $message.error(res.msg || '泛微登录失败', { key: 'login' })
+      return
+    }
+
+    await onLoginSuccess(res.data)
+
+    // 优先跳转回 redirect
+    const target = redirect && redirect !== '/login' ? String(redirect) : (import.meta.env.VITE_HOME_PATH || '/')
+    window.location.href = target
+  }
+  catch (e) {
+    console.error(e)
+    $message.error('泛微登录异常', { key: 'login' })
+  }
+  finally {
+    loading.value = false
+  }
+}
 
 // 获取并设置菜单数据
 async function loadAndSetMenuData() {

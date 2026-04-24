@@ -1,0 +1,22 @@
+{
+  "data": [
+    {
+      "row_kind": "department",
+      "department_id": "2",
+      "sup_department_id": "0",
+      "department_name": "办公室",
+      "department_mark": "办公室"
+    },
+    {
+      "row_kind": "user",
+      "resource_id": "22",
+      "workcode": "0001",
+      "lastname": "王刚强",
+      "mobile": "13808219375",
+      "department_id": "2",
+      "department_name": "办公室",
+      "status": 1,
+      "modified": 1771393736000
+    }
+  ]
+}

@@ -2,7 +2,9 @@ package com.mdframe.forge.plugin.system.dto;
 
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.io.Serializable;
+import java.time.LocalDate;
 
 /**
  * 用户新增/修改DTO
@@ -61,6 +63,41 @@ public class SysUserDTO implements Serializable {
      * 性别（0-未知，1-男，2-女）
      */
     private Integer gender;
+
+    /**
+     * 生日
+     */
+    private LocalDate birthday;
+
+    /**
+     * 籍贯
+     */
+    private String nativePlace;
+
+    /**
+     * 教育程度（外部码值）
+     */
+    private Integer educationLevel;
+
+    /**
+     * 参加工作日期
+     */
+    private LocalDate workStartDate;
+
+    /**
+     * 入司日期
+     */
+    private LocalDate companyStartDate;
+
+    /**
+     * 工作年限（年）
+     */
+    private BigDecimal workYear;
+
+    /**
+     * 司龄（年）
+     */
+    private BigDecimal companyWorkYear;
 
     /**
      * 密码（新增时必传）
