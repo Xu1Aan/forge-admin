@@ -1,0 +1,13 @@
+# 复制为 application-dept-daily.yml 并按需调整（与主 yml 合并加载方式以你们项目为准）
+
+dept-daily:
+  enabled: true
+
+# 节假日缓存定时预热：默认每天 2:00 为当年、次年做 ensure（库中已有则不会调第三方）
+forge:
+  dept-daily:
+    calendar:
+      warmup:
+        enabled: true
+        # Spring @Scheduled 表达式：秒 分 时 日 月 周
+        cron: "0 0 2 * * ?"

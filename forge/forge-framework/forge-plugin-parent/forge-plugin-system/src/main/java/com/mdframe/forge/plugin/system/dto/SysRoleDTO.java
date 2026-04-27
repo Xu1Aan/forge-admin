@@ -51,4 +51,9 @@ public class SysRoleDTO implements Serializable {
      * 备注
      */
     private String remark;
+
+    /**
+     * 是否系统内置角色（0-否，1-是）
+     */
+    private Integer isSystem;
 }

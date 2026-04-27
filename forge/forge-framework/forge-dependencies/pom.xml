@@ -443,6 +443,12 @@
                 <artifactId>forge-plugin-ai</artifactId>
                 <version>${revision}</version>
             </dependency>
+
+            <dependency>
+                <groupId>com.mdframe.forge</groupId>
+                <artifactId>forge-plugin-dept-daily</artifactId>
+                <version>${revision}</version>
+            </dependency>
             
             
         </dependencies>

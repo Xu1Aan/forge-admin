@@ -42,6 +42,12 @@ public class ReplayAttackFilter implements Filter {
             return;
         }
 
+        // 与 EncryptResponse/Decrypt 一致：主开关关闭时不走防重放（开发环境常设 forge.crypto.enabled: false）
+        if (!Boolean.TRUE.equals(properties.getEnabled())) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         // 检查是否需要防重放验证
         if (!needReplayProtection(path) || path.startsWith("/ws")) {
             chain.doFilter(request, response);

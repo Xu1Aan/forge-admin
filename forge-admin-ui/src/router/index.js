@@ -96,6 +96,13 @@ export const manualRoutes = [
     component: () => import('@/views/nexus/role-management.vue'),
     meta: { title: 'Nexus 角色管理', layout: 'nexus' },
   },
+  // 部门日常-考勤填报
+  {
+    name: 'DeptDailyAttendance',
+    path: '/dept-daily/attendance',
+    component: () => import('@/views/dept-daily/attendance.vue'),
+    meta: { title: '考勤填报' },
+  },
 ]
 
 // 从 unplugin-vue-router 自动生成的路由

@@ -22,6 +22,12 @@
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-system</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-dept-daily</artifactId>
+            <version>1.0.0</version>
+        </dependency>
         
         <dependency>
             <groupId>com.mdframe.forge</groupId>
