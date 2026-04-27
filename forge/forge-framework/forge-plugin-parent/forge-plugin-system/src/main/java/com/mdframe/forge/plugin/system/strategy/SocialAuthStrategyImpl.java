@@ -1,19 +1,17 @@
 package com.mdframe.forge.plugin.system.strategy;
 
-import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.mdframe.forge.plugin.system.constant.SystemConstants;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
 import com.mdframe.forge.plugin.system.service.ISysConfigService;
-import com.mdframe.forge.plugin.system.service.IUserLoadService;
 import com.mdframe.forge.starter.auth.domain.LoginRequest;
 import com.mdframe.forge.starter.auth.enums.AuthType;
 import com.mdframe.forge.starter.auth.util.PasswordUtil;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.social.context.SocialProperties;
 import com.mdframe.forge.starter.social.domain.entity.SysUserSocial;
+import com.mdframe.forge.starter.social.mapper.SysUserSocialMapper;
 import com.mdframe.forge.starter.social.service.ISocialUserService;
 import lombok.extern.slf4j.Slf4j;
 import me.zhyd.oauth.model.AuthUser;
@@ -40,6 +38,9 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
 
     @Autowired
     private SysUserMapper userMapper;
+
+    @Autowired
+    private SysUserSocialMapper userSocialMapper;
 
     @Override
     protected void validateRequest(LoginRequest request) {
@@ -72,22 +73,75 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
 
             SysUser sysUser = userMapper.selectById(userId);
             if (sysUser == null) {
-                throw new RuntimeException("绑定的用户不存在");
+                // 绑定脏数据：sys_user_social 存在，但 user_id 对应用户已不存在
+                // 清理后继续走未绑定分支，按 workcode/手机号/邮箱 自动匹配并重绑
+                log.warn("检测到三方绑定脏数据，清理后重试匹配: platform={}, uuid={}, userId={}", platform, socialUuid, userId);
+                userSocialMapper.deleteById(userSocial.getId());
+            } else {
+                LoginUser loginUser = userLoadService.loadUserByUsername(sysUser.getUsername(), tenantId);
+                if (loginUser == null) {
+                    throw new RuntimeException("加载用户信息失败");
+                }
+                return loginUser;
             }
+        }
 
-            LoginUser loginUser = userLoadService.loadUserByUsername(sysUser.getUsername(), tenantId);
+        // 2. 未绑定：优先尝试匹配“已导入用户”，匹配到则直接绑定，避免自动创建新用户
+        // 约定：Weaver SSO 的 socialUuid 通常为工号(workcode)
+        SysUser existingUser = null;
+        if (StrUtil.isNotBlank(socialUuid)) {
+            LambdaQueryWrapper<SysUser> w = new LambdaQueryWrapper<>();
+            w.eq(SysUser::getWorkcode, socialUuid);
+            if (tenantId != null) {
+                w.eq(SysUser::getTenantId, tenantId);
+            }
+            w.last("limit 1");
+            existingUser = userMapper.selectOne(w);
+        }
+        if (existingUser == null && StrUtil.isNotBlank(request.getPhone())) {
+            LambdaQueryWrapper<SysUser> w = new LambdaQueryWrapper<>();
+            w.eq(SysUser::getPhone, request.getPhone());
+            if (tenantId != null) {
+                w.eq(SysUser::getTenantId, tenantId);
+            }
+            w.last("limit 1");
+            existingUser = userMapper.selectOne(w);
+        }
+        if (existingUser == null && StrUtil.isNotBlank(socialEmail)) {
+            LambdaQueryWrapper<SysUser> w = new LambdaQueryWrapper<>();
+            w.eq(SysUser::getEmail, socialEmail);
+            if (tenantId != null) {
+                w.eq(SysUser::getTenantId, tenantId);
+            }
+            w.last("limit 1");
+            existingUser = userMapper.selectOne(w);
+        }
+
+        if (existingUser != null) {
+            log.info("三方登录发现匹配的已存在用户，执行自动绑定: platform={}, uuid={}, userId={}, username={}",
+                    platform, socialUuid, existingUser.getId(), existingUser.getUsername());
+
+            AuthUser au = new AuthUser();
+            au.setUuid(socialUuid);
+            au.setUsername(existingUser.getUsername());
+            au.setNickname(socialNickname);
+            au.setAvatar(socialAvatar);
+            au.setEmail(socialEmail);
+            socialUserService.bindSocialUser(existingUser.getId(), au, platform, tenantId);
+
+            LoginUser loginUser = userLoadService.loadUserByUsername(existingUser.getUsername(), tenantId);
             if (loginUser == null) {
-                throw new RuntimeException("加载用户信息失败");
+                throw new RuntimeException("加载已存在用户信息失败");
             }
             return loginUser;
         }
 
-        // 2. 未绑定，检查是否自动注册
+        // 3. 未绑定且未匹配到已有用户，检查是否自动注册
         if (!Boolean.TRUE.equals(socialProperties.getAutoRegister())) {
             throw new RuntimeException("该账号未绑定，请先绑定账号");
         }
 
-        // 3. 自动注册新用户
+        // 4. 自动注册新用户
         log.info("三方登录自动注册: platform={}, uuid={}, nickname={}", platform, socialUuid, socialNickname);
 
         // 生成用户名（用platform + uuid的方式，避免过长）
@@ -131,7 +185,7 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
             userMapper.insert(newUser);
             log.info("三方登录自动创建用户: userId={}, username={}", newUser.getId(), newUser.getUsername());
         }
-        // 4. 绑定三方账号
+        // 5. 绑定三方账号
         AuthUser au = new AuthUser();
         au.setUuid(socialUuid);
         au.setUsername(username);
@@ -140,7 +194,7 @@ public class SocialAuthStrategyImpl extends AbstractAuthStrategy {
         au.setEmail(socialEmail);
         socialUserService.bindSocialUser(newUser.getId(), au, platform, tenantId);
 
-        // 5. 加载并返回LoginUser
+        // 6. 加载并返回LoginUser
         LoginUser loginUser = userLoadService.loadUserByUsername(newUser.getUsername(), tenantId);
         if (loginUser == null) {
             throw new RuntimeException("加载新用户信息失败");

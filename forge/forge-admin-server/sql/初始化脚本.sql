@@ -1561,6 +1561,7 @@ CREATE TABLE `sys_user`
     `user_client`     varchar(20)           DEFAULT NULL COMMENT '用户触点（app/pc/h5/wechat）',
     `email`           varchar(100)          DEFAULT NULL COMMENT '邮箱',
     `phone`           varchar(20)           DEFAULT NULL COMMENT '手机号',
+    `workcode`        varchar(50)           DEFAULT NULL COMMENT '工号（与外部系统/SSO 对齐的唯一标识）',
     `id_card`         varchar(32)           DEFAULT NULL COMMENT '身份证号/证件号',
     `gender`          tinyint               DEFAULT '0' COMMENT '性别（0-未知，1-男，2-女）',
     `birthday`        date                  DEFAULT NULL COMMENT '生日',
@@ -1586,6 +1587,7 @@ CREATE TABLE `sys_user`
     PRIMARY KEY (`id`),
     UNIQUE KEY `sys_user_unique` (`tenant_id`,`username`),
     KEY               `idx_tenant_status` (`tenant_id`,`user_status`),
+    KEY               `idx_tenant_workcode` (`tenant_id`,`workcode`),
     KEY               `idx_user_type` (`user_type`)
 ) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户表';
 
@@ -1877,7 +1879,7 @@ VALUES (2, 'login', '登录配置', 'lock',
         '{"enable":true,"content":"name_phone","opacity":0.3,"fontSize":16,"fontColor":"#cccccc","rotate":-20,"gapX":100,"gapY":100,"offsetX":0,"offsetY":0,"showTimestamp":false,"timestampFormat":"yyyy-MM-dd HH:mm:ss","zindex":1000}',
         4, 1, '水印相关配置', '2026-02-25 18:07:35', '2026-03-02 15:05:11'),
        (5, 'crypto', '加解密配置', 'eye',
-        '{"enabled":true,"algorithm":"SM4","secretKey":null,"enableDynamicKey":true,"rsaPublicKey":null,"rsaPrivateKey":null,"sessionKeyExpire":7200,"enableApiCrypto":true,"enableFieldCrypto":true,"enableReplayProtection":true,"replayTimeWindow":300,"replayIncludePaths":[],"replayExcludePaths":["/auth/captcha","/crypto/public-key","/ws/**","/api/flow/instance/**","/api/file/**"],"excludePaths":[]}',
+        '{"enabled":true,"algorithm":"SM4","secretKey":null,"enableDynamicKey":true,"rsaPublicKey":null,"rsaPrivateKey":null,"sessionKeyExpire":7200,"enableApiCrypto":true,"enableFieldCrypto":true,"enableReplayProtection":true,"replayTimeWindow":300,"replayIncludePaths":[],"replayExcludePaths":["/auth/captcha","/crypto/public-key","/ws/**","/api/flow/instance/**","/api/file/**","/sso/weaver/**"],"excludePaths":[]}',
         4, 1, '加解密配置', '2026-02-25 18:07:35', '2026-03-28 16:54:04'),
        (6, 'auth', '认证配置', 'eye',
         '{"enableApiPermission":true,"apiPermissionExcludePaths":["/auth/**"],"enableLoginLock":true,"maxLoginAttempts":4,"lockDuration":30,"failRecordExpire":15,"sameAccountLoginStrategy":"replace_old","enableOnlineUserManagement":true}',

@@ -78,11 +78,18 @@ forge:
       enabled: false
       # OA SSO 基础地址（不含末尾 /），例如：http://127.0.0.1:8809
       base-url: ""
+      # 泛微登录入口完整 URL（优先使用，不再由后端拼接 appid/service/_key）
+      # 示例：http://10.20.123.5/wui/index.html#/?appid=one&service=http://10.20.149.205:3000
+      login-url: ""
       client-id: ""
       # 建议通过环境变量注入，勿提交仓库
       client-secret: ""
       # 后端回调地址（需与泛微后台配置一致）
       redirect-uri: ""
+      # wui 登录入口的 service 参数（为空默认使用 redirect-uri）
+      service-url: ""
+      # wui 登录入口 _key（可选）
+      wui-key: ""
       # state 有效期（秒）
       state-ttl-seconds: 300
 

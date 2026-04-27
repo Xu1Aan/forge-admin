@@ -6,10 +6,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.starter.auth.context.WeaverSsoProperties;
 import lombok.Data;
-import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -17,12 +18,19 @@ import org.springframework.web.util.UriComponentsBuilder;
  * 泛微 SSO 接口客户端（authorize/accessToken/profile）
  */
 @Component
-@RequiredArgsConstructor
 public class WeaverSsoClient {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final WeaverSsoProperties properties;
+
+    public WeaverSsoClient(@Qualifier("weaverRestTemplate") RestTemplate restTemplate,
+                           ObjectMapper objectMapper,
+                           WeaverSsoProperties properties) {
+        this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
+        this.properties = properties;
+    }
 
     public AccessTokenResponse getAccessToken(String ticket) {
         ensureEnabledAndConfigured();
@@ -40,8 +48,13 @@ public class WeaverSsoClient {
                 .build(true)
                 .toUriString();
 
-        ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), String.class);
-        String body = resp.getBody();
+        String body;
+        try {
+            ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), String.class);
+            body = resp.getBody();
+        } catch (HttpStatusCodeException e) {
+            body = e.getResponseBodyAsString();
+        }
         if (StringUtils.isBlank(body)) {
             throw new IllegalStateException("泛微 accessToken 返回空响应体");
         }
@@ -72,8 +85,13 @@ public class WeaverSsoClient {
                 .build(true)
                 .toUriString();
 
-        ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), String.class);
-        String body = resp.getBody();
+        String body;
+        try {
+            ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()), String.class);
+            body = resp.getBody();
+        } catch (HttpStatusCodeException e) {
+            body = e.getResponseBodyAsString();
+        }
         if (StringUtils.isBlank(body)) {
             throw new IllegalStateException("泛微 profile 返回空响应体");
         }

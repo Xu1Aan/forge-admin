@@ -49,6 +49,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 .like(StringUtils.isNotBlank(query.getRealName()), SysUser::getRealName, query.getRealName())
                 .eq(query.getUserType() != null, SysUser::getUserType, query.getUserType())
                 .eq(StringUtils.isNotBlank(query.getPhone()), SysUser::getPhone, query.getPhone())
+                .eq(StringUtils.isNotBlank(query.getWorkcode()), SysUser::getWorkcode, query.getWorkcode())
                 .eq(query.getUserStatus() != null, SysUser::getUserStatus, query.getUserStatus())
                 .eq(query.getCreateDept() != null, SysUser::getCreateDept, query.getCreateDept())
                 .orderByDesc(SysUser::getCreateTime);

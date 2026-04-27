@@ -57,6 +57,12 @@ public class SysUser extends TenantEntity {
     private String phone;
 
     /**
+     * 工号（与外部系统/SSO 对齐的唯一标识）
+     */
+    @TableField("workcode")
+    private String workcode;
+
+    /**
      * 身份证号
      */
     private String idCard;

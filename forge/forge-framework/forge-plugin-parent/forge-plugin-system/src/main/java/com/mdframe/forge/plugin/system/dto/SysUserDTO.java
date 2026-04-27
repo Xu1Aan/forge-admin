@@ -55,6 +55,11 @@ public class SysUserDTO implements Serializable {
     private String phone;
 
     /**
+     * 工号
+     */
+    private String workcode;
+
+    /**
      * 身份证号
      */
     private String idCard;

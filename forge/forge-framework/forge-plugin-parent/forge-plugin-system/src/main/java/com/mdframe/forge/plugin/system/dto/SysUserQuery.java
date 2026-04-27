@@ -39,6 +39,11 @@ public class SysUserQuery extends PageQuery {
     private String phone;
 
     /**
+     * 工号
+     */
+    private String workcode;
+
+    /**
      * 用户状态（0-禁用，1-正常，2-锁定）
      */
     private Integer userStatus;

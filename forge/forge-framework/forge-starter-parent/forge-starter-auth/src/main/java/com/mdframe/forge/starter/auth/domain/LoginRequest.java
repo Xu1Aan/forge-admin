@@ -1,5 +1,6 @@
 package com.mdframe.forge.starter.auth.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -8,6 +9,7 @@ import java.io.Serializable;
  * 登录请求参数
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class LoginRequest implements Serializable {
 
     private static final long serialVersionUID = 1L;

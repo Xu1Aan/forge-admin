@@ -59,6 +59,7 @@ public class SystemAuthServiceImpl implements IAuthService {
         
         SysClient client = validateAndLoadClient(
             request.getUserClient(), 
+            request.getAuthType(),
             request.getAppId(),
             request.getAppSecret()
         );
@@ -140,7 +141,7 @@ public class SystemAuthServiceImpl implements IAuthService {
         }
     }
 
-    private SysClient validateAndLoadClient(String userClient, String appId, String appSecret) {
+    private SysClient validateAndLoadClient(String userClient, String authType, String appId, String appSecret) {
         if (StrUtil.isBlank(userClient)) {
             userClient = "pc";
         }
@@ -156,6 +157,11 @@ public class SystemAuthServiceImpl implements IAuthService {
         
         // 验证AppId和AppSecret（可选）
         if (authProperties.getEnableClientValidation()) {
+            // 第三方登录（如 OAuth2/SSO 回调）由后端服务端发起，不强制要求前端携带 appId/appSecret
+            if (StrUtil.equalsAnyIgnoreCase(authType, LoginRequest.AUTH_TYPE_OAUTH2, LoginRequest.AUTH_TYPE_SOCIAL)) {
+                return client;
+            }
+
             // 验证AppId
             if (StrUtil.isBlank(appId)) {
                 throw new RuntimeException("客户端AppId不能为空");

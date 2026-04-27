@@ -1,6 +1,5 @@
 package com.mdframe.forge.starter.crypto.filter;
 
-import cn.dev33.satoken.annotation.SaIgnore;
 import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.starter.crypto.cache.ReplayTokenCache;
@@ -11,7 +10,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.AntPathMatcher;
-import org.springframework.web.method.HandlerMethod;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -99,6 +97,11 @@ public class ReplayAttackFilter implements Filter {
      * 判断是否需要防重放保护
      */
     private boolean needReplayProtection(String path) {
+        // 未启用时直接跳过
+        if (!Boolean.TRUE.equals(properties.getEnableReplayProtection())) {
+            return false;
+        }
+
         // 先检查排除路径
         for (String pattern : properties.getReplayExcludePaths()) {
             if (pathMatcher.match(pattern, path)) {

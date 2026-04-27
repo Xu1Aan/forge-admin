@@ -68,6 +68,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: VITE_HTTP_PORT,
+      host: '0.0.0.0',
       open: false,
       proxy: {
         // 流程服务代理 - 必须在主代理之前，匹配更具体的路径

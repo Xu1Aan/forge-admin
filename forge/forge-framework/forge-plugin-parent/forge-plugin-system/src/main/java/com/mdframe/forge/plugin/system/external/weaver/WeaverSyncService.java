@@ -419,6 +419,7 @@ public class WeaverSyncService {
                 u.setUsername(username);
                 u.setRealName(ext.getName());
                 u.setPhone(chooseUserPhone(ext));
+                u.setWorkcode(ext.getExternalUserId());
                 u.setEmail(ext.getEmail());
                 u.setIdCard(normalizeIdCard(ext.getIdCard()));
                 u.setGender(mapGender(ext.getSex()));
@@ -490,6 +491,9 @@ public class WeaverSyncService {
 
             u.setRealName(ext.getName());
             u.setPhone(chooseUserPhone(ext));
+            if (StringUtils.isBlank(u.getWorkcode())) {
+                u.setWorkcode(ext.getExternalUserId());
+            }
             u.setEmail(ext.getEmail());
             u.setIdCard(normalizeIdCard(ext.getIdCard()));
             u.setGender(mapGender(ext.getSex()));
