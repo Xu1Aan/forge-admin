@@ -19,6 +19,8 @@ CREATE TABLE dept_daily_project (
   office_id           BIGINT NULL,                 -- 科室（可为空：不区分科室）
 
   project_name        VARCHAR(200) NOT NULL,
+  project_category    VARCHAR(32)  NULL COMMENT '项目类别 INFO_DESIGN/INFO_DEV/RESEARCH/ELECTRICAL_SEC/OTHER',
+
   leader_user_id      BIGINT NOT NULL,             -- 项目负责人
 
   start_date          DATE NOT NULL,               -- 立项时间
@@ -39,6 +41,7 @@ CREATE TABLE dept_daily_project (
   INDEX idx_dd_proj_leader (leader_user_id),
   INDEX idx_dd_proj_status (status),
   INDEX idx_dd_proj_dates (start_date, plan_end_date),
+  INDEX idx_dd_proj_category (tenant_id, project_category),
   UNIQUE KEY uk_dd_proj_tenant_name (tenant_id, project_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

@@ -8,6 +8,7 @@
         SELECT
             p.id AS projectId,
             p.project_name AS projectName,
+            p.project_category AS projectCategory,
             p.leader_user_id AS leaderUserId,
             COALESCE(NULLIF(u.real_name, ''), u.username) AS leaderName,
             r.report_ym AS reportYm,
@@ -33,6 +34,9 @@
             AND (p.project_name LIKE CONCAT('%', #{keyword}, '%')
               OR u.username LIKE CONCAT('%', #{keyword}, '%')
               OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="projectCategory != null and projectCategory != ''">
+            AND p.project_category = #{projectCategory}
         </if>
         ORDER BY p.plan_end_date ASC, p.id DESC
     </select>

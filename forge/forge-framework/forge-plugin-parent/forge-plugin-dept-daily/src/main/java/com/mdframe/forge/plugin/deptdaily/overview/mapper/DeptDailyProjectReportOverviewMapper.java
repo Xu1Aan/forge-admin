@@ -15,7 +15,8 @@ public interface DeptDailyProjectReportOverviewMapper {
             @Param("reportYm") String reportYm,
             @Param("deptId") Long deptId,
             @Param("officeId") Long officeId,
-            @Param("keyword") String keyword
+            @Param("keyword") String keyword,
+            @Param("projectCategory") String projectCategory
     );
 }
 

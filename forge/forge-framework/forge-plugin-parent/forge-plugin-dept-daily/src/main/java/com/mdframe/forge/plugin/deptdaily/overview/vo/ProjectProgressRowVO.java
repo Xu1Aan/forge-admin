@@ -6,6 +6,8 @@ import lombok.Data;
 public class ProjectProgressRowVO {
     private Long projectId;
     private String projectName;
+    /** 类别码 */
+    private String projectCategory;
     private Long leaderUserId;
     private String leaderName;
     private String reportYm;

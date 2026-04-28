@@ -71,6 +71,11 @@ public class EncryptResponseBodyAdvice implements ResponseBodyAdvice<Object> {
             return false;
         }
         HttpServletRequest request = attributes.getRequest();
+        // multipart/form-data 等上传请求一般期望明文JSON返回（且前端通常不处理加密包装）
+        String ct = request.getContentType();
+        if (ct != null && ct.toLowerCase().startsWith("multipart/")) {
+            return false;
+        }
         // 内部服务调用（如 FlowClient）需要明文 JSON 响应，跳过响应加密
         if ("true".equalsIgnoreCase(request.getHeader("X-Inner-Call"))) {
             return false;

@@ -68,6 +68,11 @@ public class DecryptRequestBodyAdvice implements RequestBodyAdvice {
             return false;
         }
         HttpServletRequest request = attributes.getRequest();
+        // multipart/form-data 等上传请求不走“请求体加解密”（非JSON结构，会导致解析失败）
+        String ct = request.getContentType();
+        if (ct != null && ct.toLowerCase().startsWith("multipart/")) {
+            return false;
+        }
         // 内部服务调用（如 FlowClient）直接传输明文 JSON，无需解密
         if ("true".equalsIgnoreCase(request.getHeader("X-Inner-Call"))) {
             return false;

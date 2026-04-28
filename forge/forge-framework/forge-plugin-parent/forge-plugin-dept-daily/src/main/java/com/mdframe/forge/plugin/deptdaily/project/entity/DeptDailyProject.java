@@ -31,6 +31,11 @@ public class DeptDailyProject extends TenantEntity {
     private String projectName;
 
     /**
+     * 项目类别码，见 {@link com.mdframe.forge.plugin.deptdaily.project.enums.ProjectCategory}
+     */
+    private String projectCategory;
+
+    /**
      * 项目负责人（用户ID）
      */
     private Long leaderUserId;

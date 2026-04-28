@@ -260,13 +260,18 @@
                   <i v-else class="social-icon-fallback ai-icon:link" />
                 </button>
 
-                <!-- Weaver SSO -->
+                <!-- Weaver SSO：整页跳转至后端 /sso/weaver/authorize，非弹窗 -->
                 <button
+                  type="button"
                   class="social-button"
                   title="泛微SSO登录"
                   @click="handleWeaverLogin()"
                 >
-                  <i class="social-icon-fallback ai-icon:building" />
+                  <img
+                    class="social-icon"
+                    :src="fanweiLogo"
+                    alt="泛微SSO登录"
+                  >
                 </button>
               </div>
             </div>
@@ -339,6 +344,7 @@ import { lStorage } from '@/utils'
 import { encryptPassword, initKeyExchange } from '@/utils/crypto/key-exchange'
 import { request } from '@/utils/http'
 import api from './api'
+import fanweiLogo from '@/assets/images/fanwei.png'
 import 'vue3-slide-verify/dist/style.css'
 
 const authStore = useAuthStore()

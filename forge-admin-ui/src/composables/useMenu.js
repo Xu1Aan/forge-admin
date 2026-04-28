@@ -67,6 +67,16 @@ export function findFirstMenuWithPath(menuItem) {
   if (!menuItem)
     return null
 
+  // 目录（module）：先走子菜单，避免父级绑定占位 path（如 /system）跳转到无组件路由导致 404
+  if (menuItem.type === 'module' && menuItem.children?.length) {
+    for (const child of menuItem.children) {
+      const found = findFirstMenuWithPath(child)
+      if (found)
+        return found
+    }
+    return null
+  }
+
   if (menuItem.path && !isExternal(menuItem.path)) {
     return menuItem
   }

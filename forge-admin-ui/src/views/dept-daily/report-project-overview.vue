@@ -6,6 +6,15 @@
           <n-space align="center" wrap>
             <n-select v-model:value="year" style="width: 130px" :options="yearOptions" @update:value="reloadProjects" />
             <n-select v-model:value="month" style="width: 110px" :options="monthOptions" @update:value="reloadProjects" />
+            <n-select
+              v-model:value="projectCategory"
+              clearable
+              style="width: 160px"
+              placeholder="项目类别"
+              :options="categoryOptions"
+              :consistent-menu-width="false"
+              @update:value="reloadProjects"
+            />
             <n-input
               v-model:value="projectKeyword"
               clearable
@@ -53,6 +62,7 @@
 <script setup>
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { NButton, NTag } from 'naive-ui'
+import { projectCategoryLabel, PROJECT_CATEGORY_OPTIONS } from '@/constants/dept-daily-project-category'
 import { pageProjectProgress } from '@/api/dept-daily/overview'
 import { pageProjectMonth } from '@/api/dept-daily/report'
 
@@ -71,6 +81,8 @@ const monthOptions = computed(() => Array.from({ length: 12 }, (_, i) => ({ labe
 const loadingProject = ref(false)
 const projectRows = ref([])
 const projectKeyword = ref('')
+const projectCategory = ref(null)
+const categoryOptions = PROJECT_CATEGORY_OPTIONS
 const projectPager = reactive({ page: 1, pageSize: 10, itemCount: 0, showSizePicker: true, pageSizes: [10, 20, 50] })
 
 function tagTypeByStatus(s) {
@@ -93,6 +105,12 @@ const detailColumns = [
 
 const projectColumns = [
   { title: '项目名', key: 'projectName', minWidth: 240 },
+  {
+    title: '项目类别',
+    key: 'projectCategory',
+    width: 120,
+    render: r => projectCategoryLabel(r.projectCategory),
+  },
   { title: '项目负责人', key: 'leaderName', width: 140 },
   { title: '进展情况', key: 'summaryText', minWidth: 320, ellipsis: { tooltip: true }, render: r => (r.summaryText || '') },
   { title: '状态', key: 'status', width: 100, render: r => h(NTag, { size: 'small', type: tagTypeByStatus(r.status) }, { default: () => tagTextByStatus(r.status) }) },
@@ -112,6 +130,7 @@ async function loadProjects() {
       pageSize: projectPager.pageSize,
       reportYm: reportYm.value,
       keyword: projectKeyword.value?.trim() || undefined,
+      projectCategory: projectCategory.value || undefined,
     })
     const page = res.data
     projectRows.value = page?.records || []

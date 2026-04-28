@@ -46,6 +46,10 @@ import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NTag } from 'naive-ui'
 import { pageAttendanceMonthTable } from '@/api/dept-daily/overview'
+import { useUserStore } from '@/store/modules/user'
+
+const userStore = useUserStore()
+const deptId = computed(() => userStore.userInfo?.mainOrgId || null)
 
 const router = useRouter()
 function goUnfilled() {
@@ -144,6 +148,7 @@ async function load() {
       pageSize: pagination.pageSize,
       year: year.value,
       month: month.value,
+      deptId: deptId.value || undefined,
       employeeType: employeeType.value ?? undefined,
       keyword: keyword.value?.trim() || undefined,
     })

@@ -45,6 +45,10 @@
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { NTag } from 'naive-ui'
 import { getDeptDailyOverviewSetting, pageFillState, refreshFillState } from '@/api/dept-daily/overview'
+import { useUserStore } from '@/store/modules/user'
+
+const userStore = useUserStore()
+const deptId = computed(() => userStore.userInfo?.mainOrgId || null)
 
 const now = new Date()
 const year = ref(now.getFullYear())
@@ -104,9 +108,15 @@ const columns = [
 
 async function ensureFillStateReady() {
   try {
-    const settingRes = await getDeptDailyOverviewSetting({})
+    const settingRes = await getDeptDailyOverviewSetting({ deptId: deptId.value || undefined })
     const startYm = settingRes?.data?.attendanceStartYm || null
-    await refreshFillState({ module: 'ATTENDANCE', startYm, endYm: ym.value, employeeType: employeeType.value ?? null })
+    await refreshFillState({
+      module: 'ATTENDANCE',
+      deptId: deptId.value || null,
+      startYm,
+      endYm: ym.value,
+      employeeType: employeeType.value ?? null,
+    })
   }
   catch (e) {
     console.warn(e)
@@ -121,6 +131,7 @@ async function load() {
       pageSize: pagination.pageSize,
       module: 'ATTENDANCE',
       ym: ym.value,
+      deptId: deptId.value || undefined,
       employeeType: employeeType.value ?? undefined,
       status: 'NONE',
       keyword: keyword.value?.trim() || undefined,
@@ -155,7 +166,13 @@ function onPageSize(ps) {
 async function refreshFill() {
   refreshing.value = true
   try {
-    await refreshFillState({ module: 'ATTENDANCE', startYm: ym.value, endYm: ym.value, employeeType: employeeType.value ?? null })
+    await refreshFillState({
+      module: 'ATTENDANCE',
+      deptId: deptId.value || null,
+      startYm: ym.value,
+      endYm: ym.value,
+      employeeType: employeeType.value ?? null,
+    })
     window.$message?.success('刷新成功')
     await load()
   }

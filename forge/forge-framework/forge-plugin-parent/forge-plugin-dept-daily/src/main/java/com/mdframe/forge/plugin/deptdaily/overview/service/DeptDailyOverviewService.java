@@ -17,6 +17,7 @@ import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyFillStateMapp
 import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyProjectReportOverviewMapper;
 import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyReportSettingMapper;
 import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailySysUserLiteMapper;
+import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailySysUserOrgLiteMapper;
 import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyUserMonthReportSheetMapper;
 import com.mdframe.forge.plugin.deptdaily.overview.vo.AttendanceMonthTableRowVO;
 import com.mdframe.forge.plugin.deptdaily.overview.vo.FillStateRowVO;
@@ -34,8 +35,10 @@ import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +52,7 @@ public class DeptDailyOverviewService {
     private final DeptDailyProjectReportOverviewMapper projectProgressMapper;
     private final DeptDailySysUserLiteMapper userLiteMapper;
     private final DeptDailySysOrgLiteMapper orgLiteMapper;
+    private final DeptDailySysUserOrgLiteMapper userOrgLiteMapper;
     private final DeptAttendanceSheetMapper attendanceSheetMapper;
     private final DeptAttendanceItemMapper attendanceItemMapper;
     private final DeptCalendarService calendarService;
@@ -107,7 +111,8 @@ public class DeptDailyOverviewService {
     }
 
     public IPage<ProjectProgressRowVO> pageProjectProgress(PageQuery pageQuery, String reportYm,
-                                                           Long deptId, Long officeId, String keyword) {
+                                                           Long deptId, Long officeId, String keyword,
+                                                           String projectCategory) {
         Long tenantId = tenantOrDefault();
         return projectProgressMapper.selectProjectProgressPage(
                 pageQuery.toPage(),
@@ -115,7 +120,8 @@ public class DeptDailyOverviewService {
                 reportYm,
                 deptId,
                 officeId,
-                StringUtils.trimToNull(keyword)
+                StringUtils.trimToNull(keyword),
+                StringUtils.trimToNull(projectCategory)
         );
     }
 
@@ -144,21 +150,34 @@ public class DeptDailyOverviewService {
                                                                      Integer employeeType, String keyword) {
         Long tenantId = tenantOrDefault();
 
-        Long scopeOrgId = resolveScopeOrgId(deptId, officeId);
-        List<Long> scopeOrgIds = null;
-        if (scopeOrgId != null) {
-            scopeOrgIds = orgLiteMapper.selectDescendantOrgIds(tenantId, scopeOrgId);
-        }
-
         LambdaQueryWrapper<DeptDailySysUserLite> uw = new LambdaQueryWrapper<DeptDailySysUserLite>()
                 .eq(DeptDailySysUserLite::getTenantId, tenantId)
                 .eq(DeptDailySysUserLite::getUserStatus, 1)
                 .eq(employeeType != null, DeptDailySysUserLite::getEmployeeType, employeeType);
-        if (scopeOrgIds != null && !scopeOrgIds.isEmpty()) {
-            uw.in(DeptDailySysUserLite::getCreateDept, scopeOrgIds);
-        } else if (scopeOrgId != null) {
-            uw.eq(DeptDailySysUserLite::getCreateDept, scopeOrgId);
+
+        // 组织范围：优先用 sys_user_org（支持多组织），回落到 sys_user.create_dept
+        List<Long> scopeOrgIds = resolveScopeOrgIds(tenantId, deptId, officeId);
+        List<Long> scopeUserIds = resolveScopeUserIds(tenantId, scopeOrgIds);
+        if (scopeUserIds != null) {
+            if (scopeUserIds.isEmpty()) {
+                Page<AttendanceMonthTableRowVO> empty = new Page<>(pageQuery.getPageNum(), pageQuery.getPageSize(), 0);
+                empty.setRecords(List.of());
+                return empty;
+            }
+            uw.in(DeptDailySysUserLite::getId, scopeUserIds);
+        } else {
+            // 若未能拿到 sys_user_org 数据（兼容老数据/极端情况），使用 create_dept 过滤
+            Long scopeOrgId = resolveScopeOrgId(deptId, officeId);
+            if (scopeOrgId != null) {
+                List<Long> descendant = orgLiteMapper.selectDescendantOrgIds(tenantId, scopeOrgId);
+                if (descendant != null && !descendant.isEmpty()) {
+                    uw.in(DeptDailySysUserLite::getCreateDept, descendant);
+                } else {
+                    uw.eq(DeptDailySysUserLite::getCreateDept, scopeOrgId);
+                }
+            }
         }
+
         String kw = StringUtils.trimToNull(keyword);
         if (kw != null) {
             uw.and(w -> w.like(DeptDailySysUserLite::getUsername, kw).or().like(DeptDailySysUserLite::getRealName, kw));
@@ -300,23 +319,29 @@ public class DeptDailyOverviewService {
         if (end.isAfter(now)) end = now;
         if (start.isAfter(end)) return 0;
 
-        // 组织范围：默认主组织（本部门），包含所有下属部门
-        Long scopeOrgId = resolveScopeOrgId(deptId, officeId);
-        List<Long> scopeOrgIds = null;
-        if (scopeOrgId != null) {
-            scopeOrgIds = orgLiteMapper.selectDescendantOrgIds(tenantId, scopeOrgId);
-        }
+        // 组织范围：优先 sys_user_org（多组织），包含所有下属部门；管理员默认全租户
+        List<Long> scopeOrgIds = resolveScopeOrgIds(tenantId, deptId, officeId);
+        List<Long> scopeUserIds = resolveScopeUserIds(tenantId, scopeOrgIds);
 
-        // 用户集合：按 tenant + employeeType + org范围（sys_user.create_dept）
+        // 用户集合：按 tenant + employeeType + org范围
         LambdaQueryWrapper<DeptDailySysUserLite> uw = new LambdaQueryWrapper<DeptDailySysUserLite>()
                 .eq(DeptDailySysUserLite::getTenantId, tenantId)
                 .eq(employeeType != null, DeptDailySysUserLite::getEmployeeType, employeeType)
                 .eq(DeptDailySysUserLite::getUserStatus, 1);
-        if (scopeOrgIds != null && !scopeOrgIds.isEmpty()) {
-            uw.in(DeptDailySysUserLite::getCreateDept, scopeOrgIds);
-        } else if (scopeOrgId != null) {
-            // 极端情况：orgLiteMapper 返回空时兜底
-            uw.eq(DeptDailySysUserLite::getCreateDept, scopeOrgId);
+        if (scopeUserIds != null) {
+            if (scopeUserIds.isEmpty()) return 0;
+            uw.in(DeptDailySysUserLite::getId, scopeUserIds);
+        } else {
+            // 兼容：回落 create_dept
+            Long scopeOrgId = resolveScopeOrgId(deptId, officeId);
+            if (scopeOrgId != null) {
+                List<Long> descendant = orgLiteMapper.selectDescendantOrgIds(tenantId, scopeOrgId);
+                if (descendant != null && !descendant.isEmpty()) {
+                    uw.in(DeptDailySysUserLite::getCreateDept, descendant);
+                } else {
+                    uw.eq(DeptDailySysUserLite::getCreateDept, scopeOrgId);
+                }
+            }
         }
         List<DeptDailySysUserLite> users = userLiteMapper.selectList(uw);
         if (users == null || users.isEmpty()) return 0;
@@ -365,7 +390,8 @@ public class DeptDailyOverviewService {
                 DeptDailySysUserLite u = userById.get(uid);
                 DeptDailyFillState st = new DeptDailyFillState();
                 st.setTenantId(tenantId);
-                st.setDeptId(scopeOrgId);
+                // 仅用于列表筛选的 scope 标识：指定dept/office时用其值；否则用当前用户主组织
+                st.setDeptId(resolveScopeOrgId(deptId, officeId));
                 st.setOfficeId(null);
                 st.setEmployeeType(u != null ? u.getEmployeeType() : null);
                 st.setModule(module.toUpperCase());
@@ -395,6 +421,57 @@ public class DeptDailyOverviewService {
     private static Long tenantOrDefault() {
         Long tid = SessionHelper.getTenantId();
         return tid != null ? tid : 1L;
+    }
+
+    /**
+     * 统览范围组织集合：
+     * - 指定 officeId/deptId：取该组织及其子孙
+     * - 未指定：管理员/租户管理员=全租户（返回 null 表示不做组织过滤）；普通用户=取当前用户所有组织及其子孙
+     */
+    private List<Long> resolveScopeOrgIds(Long tenantId, Long deptId, Long officeId) {
+        if (deptId == null && officeId == null && (SessionHelper.isAdmin() || SessionHelper.isTenantAdmin())) {
+            return null; // 全租户
+        }
+
+        Set<Long> base = new LinkedHashSet<>();
+        if (officeId != null) base.add(officeId);
+        else if (deptId != null) base.add(deptId);
+        else {
+            List<Long> orgIds = SessionHelper.getOrgIds();
+            if (orgIds != null) base.addAll(orgIds);
+            Long main = SessionHelper.getMainOrgId();
+            if (main != null) base.add(main);
+        }
+
+        if (base.isEmpty()) {
+            // 兜底：无组织信息时不做过滤，避免出现“全空”
+            return null;
+        }
+
+        Set<Long> out = new LinkedHashSet<>();
+        for (Long orgId : base) {
+            if (orgId == null) continue;
+            List<Long> d = orgLiteMapper.selectDescendantOrgIds(tenantId, orgId);
+            if (d != null && !d.isEmpty()) out.addAll(d);
+            else out.add(orgId);
+        }
+        return new ArrayList<>(out);
+    }
+
+    /**
+     * 根据组织范围取用户ID；当 scopeOrgIds 为 null 时返回 null（表示不限制用户范围）。
+     * 如果 sys_user_org 没有数据或查询异常，则返回 null 让调用方回落到 create_dept 方案。
+     */
+    private List<Long> resolveScopeUserIds(Long tenantId, List<Long> scopeOrgIds) {
+        if (scopeOrgIds == null) return null;
+        if (scopeOrgIds.isEmpty()) return List.of();
+        try {
+            List<Long> ids = userOrgLiteMapper.selectDistinctUserIdsByOrgIds(tenantId, scopeOrgIds);
+            if (ids == null) return List.of();
+            return ids;
+        } catch (Exception ignore) {
+            return null;
+        }
     }
 
     /**

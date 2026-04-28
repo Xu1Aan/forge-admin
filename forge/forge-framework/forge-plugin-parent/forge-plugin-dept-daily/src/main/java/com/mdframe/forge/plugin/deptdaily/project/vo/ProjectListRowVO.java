@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 public class ProjectListRowVO {
     private Long id;
     private String projectName;
+    private String projectCategory;
     private Long leaderUserId;
     private String leaderName;
     private Integer memberCount;

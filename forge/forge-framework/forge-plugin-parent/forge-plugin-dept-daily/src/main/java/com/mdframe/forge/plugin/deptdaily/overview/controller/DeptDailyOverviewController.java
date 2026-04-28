@@ -12,6 +12,7 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.domain.RespInfo;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -63,6 +64,10 @@ public class DeptDailyOverviewController {
                                                          @RequestParam(required = false) Integer employeeType,
                                                          @RequestParam(required = false) String status,
                                                          @RequestParam(required = false) String keyword) {
+        // 默认数据范围：普通用户未指定 dept/office 时，限制为其主组织（避免误展示全租户）
+        if (deptId == null && officeId == null && !SessionHelper.isAdmin() && !SessionHelper.isTenantAdmin()) {
+            deptId = SessionHelper.getMainOrgId();
+        }
         return RespInfo.success(overviewService.pageFillState(
                 pageQuery,
                 module,
@@ -83,8 +88,9 @@ public class DeptDailyOverviewController {
                                                                      @RequestParam String reportYm,
                                                                      @RequestParam(required = false) Long deptId,
                                                                      @RequestParam(required = false) Long officeId,
-                                                                     @RequestParam(required = false) String keyword) {
-        return RespInfo.success(overviewService.pageProjectProgress(pageQuery, reportYm, deptId, officeId, keyword));
+                                                                     @RequestParam(required = false) String keyword,
+                                                                     @RequestParam(required = false) String projectCategory) {
+        return RespInfo.success(overviewService.pageProjectProgress(pageQuery, reportYm, deptId, officeId, keyword, projectCategory));
     }
 
     /**
@@ -114,6 +120,10 @@ public class DeptDailyOverviewController {
                                                                               @RequestParam(required = false) Long officeId,
                                                                               @RequestParam(required = false) Integer employeeType,
                                                                               @RequestParam(required = false) String keyword) {
+        // 默认数据范围：普通用户未指定 dept/office 时，限制为其主组织（避免误展示全租户/跨部门）
+        if (deptId == null && officeId == null && !SessionHelper.isAdmin() && !SessionHelper.isTenantAdmin()) {
+            deptId = SessionHelper.getMainOrgId();
+        }
         return RespInfo.success(overviewService.pageAttendanceMonthTable(
                 pageQuery, year, month, deptId, officeId, employeeType, keyword
         ));

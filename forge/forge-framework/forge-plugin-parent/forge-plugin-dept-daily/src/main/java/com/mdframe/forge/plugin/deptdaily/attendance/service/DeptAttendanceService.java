@@ -141,9 +141,6 @@ public class DeptAttendanceService {
         Long userId = requireUserId();
 
         DeptAttendanceSheet sheet = oneClickFill(year, month);
-        if (!"DRAFT".equals(sheet.getStatus())) {
-            throw new IllegalStateException("该月已提交，无法修改");
-        }
 
         LocalDate date = LocalDate.parse(req.getDate(), DF);
         if (date.getYear() != year || date.getMonthValue() != month) {
@@ -208,9 +205,6 @@ public class DeptAttendanceService {
         Long userId = requireUserId();
 
         DeptAttendanceSheet sheet = oneClickFill(year, month);
-        if (!"DRAFT".equals(sheet.getStatus())) {
-            throw new IllegalStateException("该月已提交，无法修改");
-        }
 
         LocalDate date = LocalDate.parse(req.getDate(), DF);
         if (date.getYear() != year || date.getMonthValue() != month) {
@@ -294,9 +288,6 @@ public class DeptAttendanceService {
             throw new IllegalArgumentException("不能提交未到来的月份");
         }
         DeptAttendanceSheet sheet = oneClickFill(year, month);
-        if ("SUBMITTED".equals(sheet.getStatus())) {
-            return;
-        }
         sheet.setStatus("SUBMITTED");
         sheet.setSubmittedAt(java.time.LocalDateTime.now());
         sheetMapper.updateById(sheet);

@@ -8,6 +8,7 @@
         SELECT
             p.id,
             p.project_name   AS projectName,
+            p.project_category AS projectCategory,
             p.leader_user_id AS leaderUserId,
             COALESCE(NULLIF(u.real_name, ''), u.username) AS leaderName,
             p.start_date     AS startDate,
@@ -40,10 +41,67 @@
         <if test="status != null and status != ''">
             AND p.status = #{status}
         </if>
+        <if test="projectCategory != null and projectCategory != ''">
+            AND p.project_category = #{projectCategory}
+        </if>
         <if test="keyword != null and keyword != ''">
             AND p.project_name LIKE CONCAT('%', #{keyword}, '%')
         </if>
         ORDER BY p.start_date DESC, p.id DESC
+    </select>
+
+    <!-- 项目已选成员明细（需在库中仍存在成员关系） -->
+    <select id="selectMemberRows" resultType="com.mdframe.forge.plugin.deptdaily.project.vo.ProjectMemberRowVO">
+        SELECT
+            m.user_id AS userId,
+            m.role AS memberRole,
+            u.username AS username,
+            u.real_name AS realName,
+            u.phone AS phone,
+            o.org_name AS deptName
+        FROM dept_daily_project_member m
+        INNER JOIN sys_user u ON u.id = m.user_id AND u.tenant_id = m.tenant_id
+        LEFT JOIN sys_user_org uo
+          ON uo.tenant_id = u.tenant_id
+         AND uo.user_id = u.id
+         AND uo.is_main = 1
+        LEFT JOIN sys_org o
+          ON o.tenant_id = u.tenant_id
+         AND o.id = uo.org_id
+        WHERE m.tenant_id = #{tenantId}
+          AND m.project_id = #{projectId}
+          AND m.is_active = 1
+        ORDER BY CASE WHEN m.role = 'LEADER' THEN 0 ELSE 1 END ASC,
+                 m.joined_at ASC,
+                 m.user_id ASC
+    </select>
+
+    <!-- 按用户 ID 批量简报（选人后表格展示；不包含项目成员角色） -->
+    <select id="selectMemberBriefsByIds" resultType="com.mdframe.forge.plugin.deptdaily.project.vo.ProjectMemberRowVO">
+        SELECT
+            u.id AS userId,
+            u.username AS username,
+            u.real_name AS realName,
+            u.phone AS phone,
+            o.org_name AS deptName
+        FROM sys_user u
+        LEFT JOIN sys_user_org uo
+          ON uo.tenant_id = u.tenant_id
+         AND uo.user_id = u.id
+         AND uo.is_main = 1
+        LEFT JOIN sys_org o
+          ON o.tenant_id = u.tenant_id
+         AND o.id = uo.org_id
+        WHERE u.tenant_id = #{tenantId}
+        <if test="userIds != null and userIds.size() &gt; 0">
+            AND u.id IN
+            <foreach collection="userIds" item="uid" open="(" separator="," close=")">
+                #{uid}
+            </foreach>
+        </if>
+        <if test="userIds == null || userIds.size() == 0">
+            AND 1 = 0
+        </if>
     </select>
 </mapper>
 

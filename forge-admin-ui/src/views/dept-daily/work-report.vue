@@ -29,14 +29,6 @@
           <n-button secondary :loading="loading" @click="reload">
             刷新
           </n-button>
-          <n-button
-            type="primary"
-            :loading="saving"
-            :disabled="filledCount === 0"
-            @click="submitAll"
-          >
-            提交本月（{{ filledCount }}/{{ projects.length }}）
-          </n-button>
         </n-space>
       </template>
 
@@ -50,11 +42,11 @@
               待保存 {{ dirtyCount }}
             </n-tag>
             <n-tag v-else size="small" type="info">
-              自动保存草稿（输入后约 1 秒）
+              自动保存（输入后约 1 秒）
             </n-tag>
           </n-space>
           <div class="toolbar-tip">
-            仅提交已填写内容的项目；空内容不会提交
+            输入后将自动保存
           </div>
         </n-space>
       </div>
@@ -116,15 +108,7 @@
                       :disabled="!(form[p.id] || '').trim().length"
                       @click="() => saveDraftNow(p.id)"
                     >
-                      保存草稿
-                    </n-button>
-                    <n-button
-                      type="primary"
-                      :loading="savingMap[p.id]"
-                      :disabled="!(form[p.id] || '').trim().length"
-                      @click="() => submitOne(p.id)"
-                    >
-                      提交该项目
+                      立即保存
                     </n-button>
                   </n-space>
                 </n-space>
@@ -143,7 +127,6 @@ import { listFillableProjects } from '@/api/dept-daily/project'
 import { pageUserMonthItem, upsertUserMonthItem } from '@/api/dept-daily/report'
 
 const loading = ref(false)
-const saving = ref(false)
 
 const now = new Date()
 const year = ref(now.getFullYear())
@@ -270,55 +253,7 @@ async function flushDraft(projectId) {
     await saveDraftNow(projectId)
 }
 
-async function submitOne(projectId) {
-  await flushDraft(projectId)
-  const text = (form[projectId] || '').trim()
-  if (!text) {
-    window.$message?.warning('请先填写内容再提交')
-    return
-  }
-  savingMap[projectId] = true
-  try {
-    await upsertUserMonthItem({
-      reportYm: reportYm.value,
-      projectId,
-      progressText: text,
-      submit: true,
-    })
-    lastSaved[projectId] = form[projectId]
-    dirty[projectId] = false
-    window.$message?.success('提交成功')
-  }
-  catch (e) {
-    console.error(e)
-    window.$message?.error(e?.response?.data?.message || e?.message || '提交失败')
-  }
-  finally {
-    savingMap[projectId] = false
-  }
-}
-
-async function submitAll() {
-  const ids = projects.value
-    .map(p => p.id)
-    .filter(id => (form[id] || '').trim().length > 0)
-
-  if (ids.length === 0) {
-    window.$message?.warning('请至少填写一条进展后再提交')
-    return
-  }
-
-  saving.value = true
-  try {
-    for (const id of ids) {
-      await submitOne(id)
-    }
-    window.$message?.success('本月已提交')
-  }
-  finally {
-    saving.value = false
-  }
-}
+// 已按需求移除“提交”能力：保留自动保存与手动“立即保存”
 
 onMounted(() => {
   load()

@@ -25,6 +25,7 @@
         <!-- 菜单列表 -->
         <n-scrollbar class="drawer-menu-list">
           <n-menu
+            class="drawer-side-menu"
             :options="filteredMenus"
             :value="activeKey"
             :indent="16"
@@ -112,5 +113,69 @@ function handleMenuSelect(key) {
 .drawer-menu-list {
   flex: 1;
   overflow: hidden;
+}
+
+/* 让抽屉内菜单也有明显“正在使用”选中态 */
+.drawer-side-menu {
+  padding: 6px 0;
+  background: transparent;
+}
+
+.drawer-side-menu :deep(.n-menu-item-content) {
+  position: relative;
+  margin: 1px 6px;
+  border-radius: var(--radius-md);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  min-height: 38px;
+  padding: 0 12px !important;
+}
+
+.drawer-side-menu :deep(.n-menu-item-content:hover) {
+  color: var(--primary-500);
+  background: var(--primary-50);
+}
+
+.drawer-side-menu :deep(.n-menu-item-content--selected) {
+  background: var(--primary-50) !important;
+  color: var(--primary-500) !important;
+  font-weight: 500;
+}
+
+.drawer-side-menu :deep(.n-menu-item-content--selected:hover) {
+  background: var(--primary-50) !important;
+  color: var(--primary-500) !important;
+}
+
+.drawer-side-menu :deep(.n-menu-item-content--selected::after) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  height: 60%;
+  width: 3px;
+  background: var(--primary-500);
+  border-radius: 0 2px 2px 0;
+}
+
+.drawer-side-menu :deep(.n-menu-item-content__icon) {
+  font-size: 16px;
+  margin-right: 8px !important;
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+.drawer-side-menu :deep(.n-menu-item-content:hover .n-menu-item-content__icon) {
+  color: var(--primary-500);
+  opacity: 1;
+}
+
+.drawer-side-menu :deep(.n-menu-item-content--selected .n-menu-item-content__icon) {
+  color: var(--primary-500) !important;
+  opacity: 1;
 }
 </style>

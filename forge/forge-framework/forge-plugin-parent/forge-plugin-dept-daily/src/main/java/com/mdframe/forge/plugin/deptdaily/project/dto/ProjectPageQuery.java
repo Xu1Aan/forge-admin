@@ -12,5 +12,7 @@ public class ProjectPageQuery extends PageQuery {
     private Integer year;
     private String keyword;
     private String status;
+    /** 按项目类别筛选 */
+    private String projectCategory;
 }
 

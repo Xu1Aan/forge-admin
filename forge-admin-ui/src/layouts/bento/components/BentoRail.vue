@@ -69,17 +69,18 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { usePermissionStore, useAppStore } from '@/store'
 import TheLogo from '@/components/common/TheLogo.vue'
 import { MessageNotification } from '@/layouts/components'
 import DrawerMenu from '../../immersive/components/DrawerMenu.vue'
-import { useUser } from '@/composables'
+import { useUser, useMenu, findFirstMenuWithPath } from '@/composables'
 
-const router = useRouter()
 const route = useRoute()
 const permissionStore = usePermissionStore()
 const appStore = useAppStore()
+
+const { handleMenuSelect: baseHandleMenuSelect } = useMenu()
 
 const menuDrawerVisible = ref(false)
 
@@ -127,8 +128,29 @@ const activeKey = computed(() => {
 })
 
 function handleMenuSelect(item) {
-  if (item.path) {
-    router.push(item.path)
+  const key = item.id ?? item.key
+  if (key == null)
+    return
+
+  appStore.setSelectedTopMenuId(key)
+
+  if (item.type === 'module') {
+    const firstMenu = findFirstMenuWithPath(item)
+    if (firstMenu?.path) {
+      baseHandleMenuSelect(firstMenu.key || firstMenu.id)
+    }
+    return
+  }
+
+  if (item.type === 'menu' && item.path) {
+    baseHandleMenuSelect(item.key || item.id)
+    return
+  }
+
+  // 未带 type 的旧数据：与目录类似，落到第一个可导航子项
+  const firstMenu = findFirstMenuWithPath(item)
+  if (firstMenu?.path) {
+    baseHandleMenuSelect(firstMenu.key || firstMenu.id)
   }
 }
 

@@ -11,6 +11,8 @@ public class ProjectUpdateRequest {
     private Long deptId;
     private Long officeId;
     private String projectName;
+    /** 不传则不改 */
+    private String projectCategory;
     private Long leaderUserId;
     private List<Long> memberUserIds;
     private LocalDate startDate;

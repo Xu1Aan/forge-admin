@@ -58,16 +58,8 @@
 
           <n-space wrap>
             <n-button
-              type="primary"
-              :disabled="isSubmitted"
-              :loading="oneClickLoading"
-              @click="handleOneClickFill"
-            >
-              一键填报
-            </n-button>
-            <n-button
               type="success"
-              :disabled="isSubmitted || isFutureMonth"
+              :disabled="isFutureMonth"
               :loading="submitLoading"
               :title="isFutureMonth ? '仅可提交至当前月' : undefined"
               @click="handleSubmit"
@@ -85,7 +77,7 @@
         class="submitted-alert"
         title="本月已提交"
       >
-        已提交的月份不可再修改；如需调整请联系管理员或走补交流程（若已配置）。
+        仍可修改日历；修改后再次点击「提交本月」将更新提交时间。
       </n-alert>
 
       <n-spin
@@ -131,17 +123,17 @@
             </div>
           </div>
 
-          <div class="grid" :class="{ 'grid--dim': isSubmitted }">
+          <div class="grid">
             <div v-for="cell in cells" :key="cell.key" class="grid-cell">
               <div
                 v-if="cell.type === 'day'"
                 class="day-card"
                 :class="[
                   statusClass(cell.day.status),
-                  { 'is-locked': isSubmitted, 'is-compensatory-day': cell.day.compensatoryWorkday },
+                  { 'is-compensatory-day': cell.day.compensatoryWorkday },
                 ]"
                 role="button"
-                :tabindex="isSubmitted ? -1 : 0"
+                tabindex="0"
                 :aria-label="dayAriaLabel(cell.day)"
                 @click="onDayCardClick($event, cell.day)"
                 @keydown="onCardKeydown($event, cell.day)"
@@ -162,9 +154,8 @@
 
                 <div
                   v-if="cell.day.status === 'LEAVE'"
-                  class="day-leave-corner"
-                  :class="{ 'day-leave-corner--clickable': !isSubmitted }"
-                  :title="isSubmitted ? undefined : '点击编辑假种与备注'"
+                  class="day-leave-corner day-leave-corner--clickable"
+                  title="点击编辑假种与备注"
                   @click.stop="onLeaveCornerClick(cell.day)"
                 >
                   <span class="day-sub day-sub--pill day-leave-pill">
@@ -243,12 +234,11 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { getMonthView, oneClickFillMonth, submitMonth, toggleDay, updateAttendanceDay } from '@/api/dept-daily/attendance'
+import { getMonthView, submitMonth, toggleDay, updateAttendanceDay } from '@/api/dept-daily/attendance'
 
 defineOptions({ name: 'DeptDailyAttendance' })
 
 const loading = ref(true)
-const oneClickLoading = ref(false)
 const submitLoading = ref(false)
 
 const now = new Date()
@@ -426,7 +416,7 @@ function dayAriaLabel(day) {
     : (calendarSubline(day) || '')
   const cal = day.compensatoryWorkday ? '调休补班日，' : ''
   const state = isSubmitted.value
-    ? '本月已提交，不可修改。'
+    ? '本月已提交，仍可修改。'
     : (day.status === 'LEAVE'
         ? '按回车或空格恢复为默认，右下角可编辑假种与备注。'
         : (day.status === 'REST'
@@ -439,8 +429,6 @@ function onCardKeydown(e, day) {
   if (e.key !== 'Enter' && e.key !== ' ')
     return
   e.preventDefault()
-  if (isSubmitted.value)
-    return
   if (day.status === 'LEAVE') {
     void revertDayToDefault(day)
     return
@@ -485,22 +473,6 @@ function shiftMonth(delta) {
   loadView()
 }
 
-async function handleOneClickFill() {
-  oneClickLoading.value = true
-  try {
-    await oneClickFillMonth(year.value, month.value)
-    window.$message?.success('已创建本月填报单')
-    await loadView()
-  }
-  catch (e) {
-    console.error(e)
-    window.$message?.error(e?.response?.data?.message || e?.message || '操作失败')
-  }
-  finally {
-    oneClickLoading.value = false
-  }
-}
-
 async function handleSubmit() {
   if (isFutureMonth.value) {
     window.$message?.warning('不能提交未到来的月份')
@@ -527,10 +499,6 @@ function getDayByDate(date) {
 
 function onDayCardClick(e, day) {
   if (!day?.date) return
-  if (isSubmitted.value) {
-    window.$message?.warning('本月已提交，无法修改')
-    return
-  }
   if (e?.target?.closest?.('.day-leave-corner'))
     return
   if (day.status === 'LEAVE') {
@@ -558,7 +526,7 @@ async function revertDayToDefault(day) {
 }
 
 function onLeaveCornerClick(day) {
-  if (!day?.date || isSubmitted.value) return
+  if (!day?.date) return
   openChangeLeaveTypeModal(day)
 }
 
@@ -865,12 +833,6 @@ onMounted(() => {
   transition: opacity 0.2s ease;
 }
 
-.grid--dim {
-  opacity: 0.9;
-  pointer-events: none;
-  user-select: none;
-}
-
 .grid-cell {
   min-height: 96px;
 }
@@ -901,7 +863,7 @@ onMounted(() => {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .day-card:hover:not(.is-locked) {
+  .day-card:hover {
     transform: translateY(-1px);
     box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
   }
@@ -911,12 +873,6 @@ onMounted(() => {
   .day-card {
     transition: none;
   }
-}
-
-.day-card.is-locked {
-  cursor: not-allowed;
-  filter: grayscale(0.12);
-  opacity: 0.9;
 }
 
 .day-card:focus {
@@ -1106,7 +1062,7 @@ onMounted(() => {
   border-color: #334155;
 }
 @media (hover: hover) and (pointer: fine) {
-  .dark .day-card:hover:not(.is-locked) {
+  .dark .day-card:hover {
     box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
   }
 }
