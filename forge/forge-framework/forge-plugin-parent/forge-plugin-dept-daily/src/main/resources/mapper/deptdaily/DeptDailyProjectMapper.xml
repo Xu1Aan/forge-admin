@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.deptdaily.project.mapper.DeptDailyProjectMapper">
+
+    <select id="selectProjectPage" resultType="com.mdframe.forge.plugin.deptdaily.project.vo.ProjectListRowVO">
+        SELECT
+            p.id,
+            p.project_name   AS projectName,
+            p.leader_user_id AS leaderUserId,
+            COALESCE(NULLIF(u.real_name, ''), u.username) AS leaderName,
+            p.start_date     AS startDate,
+            p.plan_end_date  AS planEndDate,
+            p.status         AS status,
+            p.done_at        AS doneAt,
+            p.done_by_user_id AS doneByUserId,
+            COALESCE(m.cnt, 0) AS memberCount
+        FROM dept_daily_project p
+        LEFT JOIN sys_user u
+          ON u.tenant_id = p.tenant_id
+         AND u.id = p.leader_user_id
+        LEFT JOIN (
+            SELECT tenant_id, project_id, COUNT(1) AS cnt
+            FROM dept_daily_project_member
+            WHERE is_active = 1
+            GROUP BY tenant_id, project_id
+        ) m ON m.tenant_id = p.tenant_id AND m.project_id = p.id
+        WHERE p.tenant_id = #{tenantId}
+        <if test="deptId != null">
+            AND p.dept_id = #{deptId}
+        </if>
+        <if test="officeId != null">
+            AND p.office_id = #{officeId}
+        </if>
+        <if test="year != null">
+            AND p.start_date <![CDATA[>=]]> CONCAT(#{year}, '-01-01')
+            AND p.start_date <![CDATA[<=]]> CONCAT(#{year}, '-12-31')
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND p.project_name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        ORDER BY p.start_date DESC, p.id DESC
+    </select>
+</mapper>
+

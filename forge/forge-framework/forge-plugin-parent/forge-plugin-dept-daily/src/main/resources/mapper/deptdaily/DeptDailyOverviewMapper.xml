@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyFillStateMapper">
+    <select id="selectFillStatePage" resultType="com.mdframe.forge.plugin.deptdaily.overview.vo.FillStateRowVO">
+        SELECT
+            s.user_id    AS userId,
+            u.username   AS username,
+            u.real_name  AS realName,
+            COALESCE(s.employee_type, u.employee_type) AS employeeType,
+            s.ym         AS ym,
+            s.module     AS module,
+            s.status     AS status
+        FROM dept_daily_fill_state s
+        LEFT JOIN sys_user u
+          ON u.tenant_id = s.tenant_id
+         AND u.id = s.user_id
+        WHERE s.tenant_id = #{tenantId}
+          AND s.module = #{module}
+          AND s.ym = #{ym}
+        <if test="deptId != null">
+            AND s.dept_id = #{deptId}
+        </if>
+        <if test="officeId != null">
+            AND s.office_id = #{officeId}
+        </if>
+        <if test="employeeType != null">
+            AND s.employee_type = #{employeeType}
+        </if>
+        <if test="status != null and status != ''">
+            AND s.status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (u.username LIKE CONCAT('%', #{keyword}, '%')
+              OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY s.status ASC, u.real_name ASC, u.username ASC, s.user_id ASC
+    </select>
+
+    <insert id="upsertBatch">
+        INSERT INTO dept_daily_fill_state (
+            tenant_id, dept_id, office_id, employee_type,
+            module, year, month, ym, user_id,
+            status, last_calc_time,
+            create_by, create_time, create_dept, update_by, update_time
+        )
+        VALUES
+        <foreach collection="list" item="it" separator=",">
+            (
+            #{it.tenantId}, #{it.deptId}, #{it.officeId}, #{it.employeeType},
+            #{it.module}, #{it.year}, #{it.month}, #{it.ym}, #{it.userId},
+            #{it.status}, #{it.lastCalcTime},
+            #{it.createBy}, #{it.createTime}, #{it.createDept}, #{it.updateBy}, #{it.updateTime}
+            )
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            dept_id = VALUES(dept_id),
+            office_id = VALUES(office_id),
+            employee_type = VALUES(employee_type),
+            status = VALUES(status),
+            last_calc_time = VALUES(last_calc_time),
+            update_by = VALUES(update_by),
+            update_time = VALUES(update_time)
+    </insert>
+</mapper>

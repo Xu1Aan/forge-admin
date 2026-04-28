@@ -8,6 +8,18 @@ body {
 #app {
   width: 100%;
   height: 100%;
+  /* 全局视觉缩放（按需求：整体放大 1.2 倍） */
+  zoom: 1.1;
+  transform-origin: 0 0;
+}
+
+/* 兼容不支持 zoom 的环境：用 transform 做兜底，并修正尺寸避免裁切 */
+@supports not (zoom: 1) {
+  #app {
+    transform: scale(1.2);
+    width: calc(100% / 1.2);
+    height: calc(100% / 1.2);
+  }
 }
 
 /* transition fade-slide - 已移至 animations.css */

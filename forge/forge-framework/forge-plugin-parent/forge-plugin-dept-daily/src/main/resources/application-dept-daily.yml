@@ -11,3 +11,10 @@ forge:
         enabled: true
         # Spring @Scheduled 表达式：秒 分 时 日 月 周
         cron: "0 0 2 * * ?"
+
+    overview:
+      fill-state:
+        warmup:
+          enabled: true
+          # 默认每天 2:30 刷新当月 fill_state
+          cron: "0 30 2 * * ?"

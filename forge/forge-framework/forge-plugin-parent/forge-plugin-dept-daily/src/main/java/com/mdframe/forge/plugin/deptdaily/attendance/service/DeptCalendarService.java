@@ -27,7 +27,11 @@ public class DeptCalendarService {
     private final JieJiaRiApiClient apiClient;
 
     /**
-     * 确保某年日历已缓存到库（无则拉取并写入）。
+     * 确保某年日历已缓存到库（无则全量拉取并写入）。
+     * <p>
+     * 已有该年行时<b>不会</b>再请求全量接口（避免每次打开月视图都调第三方）；
+     * 需与 jiejiari 保持完全一致时请调用 {@link #refreshYear(int)}（例如通过 REST「同步节假日」），
+     * 或删除库中该年数据后让本方法再次全量拉取。
      */
     @Transactional(rollbackFor = Exception.class)
     public void ensureYearCached(int year) {
@@ -36,9 +40,26 @@ public class DeptCalendarService {
                 .eq(DeptCalendarDay::getTenantId, tenantId)
                 .eq(DeptCalendarDay::getYear, year));
         if (cnt != null && cnt > 0) {
+            Long wd = calendarDayMapper.selectCount(new LambdaQueryWrapper<DeptCalendarDay>()
+                    .eq(DeptCalendarDay::getTenantId, tenantId)
+                    .eq(DeptCalendarDay::getYear, year)
+                    .eq(DeptCalendarDay::getSource, "WORKDAYS"));
+            if (wd == null || wd == 0) {
+                backfillWorkdays(year);
+            }
             return;
         }
         refreshYear(year);
+    }
+
+    private void backfillWorkdays(int year) {
+        Long tenantId = tenantOrDefault();
+        for (JieJiaRiApiClient.DayInfo d : apiClient.fetchWorkdays(year).values()) {
+            if (d == null || StringUtils.isBlank(d.getDate()) || d.getIsOffDay() == null) {
+                continue;
+            }
+            upsert(tenantId, year, d, "WORKDAYS");
+        }
     }
 
     /**
@@ -50,23 +71,50 @@ public class DeptCalendarService {
 
         Map<String, JieJiaRiApiClient.DayInfo> holidays = apiClient.fetchHolidays(year);
         Map<String, JieJiaRiApiClient.DayInfo> weekends = apiClient.fetchWeekends(year);
+        Map<String, JieJiaRiApiClient.DayInfo> workdays = apiClient.fetchWorkdays(year);
 
-        // holidays 先写入
+        // holidays 先写入（法定、调休、补班以「节假日」结果为准，含周末补班 isOffDay=false 等）
         for (JieJiaRiApiClient.DayInfo d : holidays.values()) {
             upsert(tenantId, year, d, "HOLIDAYS");
         }
-        // weekends 再写入（调休上班日/周末信息），若同日已存在则覆盖（以接口为准）
+        /**
+         * jiejiari {@code /v1/weekends} 会列出全年每个周六/周日，且对「周六/周日」普遍返回 {@code isOffDay: false}，
+         * 与「是否国家休息日」的直觉相反；若与 holidays 同序写入会<strong>覆盖</strong>清明/国庆等周末法定假。
+         * 对仅标注「周六」「周日」的条目不写入；其余（极少见）不覆盖已存在的 HOLIDAYS 行。
+         */
         for (JieJiaRiApiClient.DayInfo d : weekends.values()) {
+            if (d == null || StringUtils.isBlank(d.getDate()) || d.getIsOffDay() == null) {
+                continue;
+            }
+            if (isJieJiaGenericWeekendLabel(d.getName())) {
+                continue;
+            }
+            LocalDate day = LocalDate.parse(d.getDate(), DF);
+            DeptCalendarDay existing = calendarDayMapper.selectOne(new LambdaQueryWrapper<DeptCalendarDay>()
+                    .eq(DeptCalendarDay::getTenantId, tenantId)
+                    .eq(DeptCalendarDay::getDay, day)
+                    .last("limit 1"));
+            if (existing != null && "HOLIDAYS".equals(existing.getSource())) {
+                continue;
+            }
             upsert(tenantId, year, d, "WEEKENDS");
+        }
+        for (JieJiaRiApiClient.DayInfo d : workdays.values()) {
+            if (d == null || StringUtils.isBlank(d.getDate()) || d.getIsOffDay() == null) {
+                continue;
+            }
+            upsert(tenantId, year, d, "WORKDAYS");
         }
     }
 
     /**
-     * 计算某天是否休息（含调休/法定节假日覆盖）。
-     * 规则：平日默认需出勤；自然周六日默认休。缓存行 isOff 覆盖「是否休」。
-     * <p>
-     * 对<strong>自然周六/周日</strong>：仅当国家安排需上班的「补班」等才按上班（isOff=0 且名称可辨认为补班/调休上班）；
-     * 避免第三方将普通周末误标为「上班」导致主界面显示为出勤。平日逻辑不变。
+     * 计算某天是否休息（国家日历 + 自然周末默认）。
+     * <ul>
+     *   <li><b>周一～周五</b>：无库行则默认上班；有行则以 {@code is_off_day=1} 为休、{@code 0} 为上班。</li>
+     *   <li><b>周六、周日</b>：无库行则默认<b>休</b>。有行时，以「节假日」接口写入的 {@code is_off_day} 为准（含周末补班日 {@code 0}）。
+     *   已忽略 jiejiari「周末」列表中仅名称为「周六/周日」的误导行；若历史库中仍有此类 WEEKEnds 行，读时同规则忽略。</li>
+     * </ul>
+     * 数据来源为拉取后写入的 {@code dept_calendar_day}（见 {@link #refreshYear(int)}）。
      */
     public boolean isOffDay(LocalDate date) {
         if (date == null) return false;
@@ -115,14 +163,35 @@ public class DeptCalendarService {
             return base;
         }
         if (weekend) {
-            if (row.getIsOffDay() == 1) {
-                return true; // 明确休息（如落在周末的法定假等）
+            if (isJieJiaWeekendListNoiseRow(row)) {
+                return true;
             }
-            if (row.getIsOffDay() == 0) {
-                return !isCompensatoryWorkdayLabel(row.getName());
-            }
+            return row.getIsOffDay() == 1;
         }
         return row.getIsOffDay() == 1;
+    }
+
+    /**
+     * 自然周六、日（公历）。
+     */
+    public boolean isNaturalWeekend(LocalDate date) {
+        return date != null && isWeekend(date);
+    }
+
+    /**
+     * 调休补班：自然周末且国家日历标记为上班（is_off_day=0）。
+     */
+    public boolean isCompensatoryWorkday(LocalDate date, DeptCalendarDay row) {
+        if (date == null || row == null || row.getIsOffDay() == null) {
+            return false;
+        }
+        if (!isWeekend(date) || row.getIsOffDay() != 0) {
+            return false;
+        }
+        if (isJieJiaWeekendListNoiseRow(row)) {
+            return false;
+        }
+        return true;
     }
 
     public String getDayName(LocalDate date) {
@@ -140,22 +209,28 @@ public class DeptCalendarService {
     }
 
     String dayNameForRow(LocalDate date, DeptCalendarDay row) {
-        if (date == null) return null;
-        if (row == null) return null;
-        if (isWeekend(date) && row.getIsOffDay() != null
-                && row.getIsOffDay() == 0
-                && !isCompensatoryWorkdayLabel(row.getName())) {
+        if (date == null || row == null) return null;
+        if (isJieJiaWeekendListNoiseRow(row)) {
             return null;
         }
         return StringUtils.trimToNull(row.getName());
     }
 
-    private DeptCalendarDay getRowOrNull(long tenantId, LocalDate day) {
-        if (day == null) return null;
+    /**
+     * 读取某日国家日历缓存行（无则 null）。
+     */
+    public DeptCalendarDay getCalendarRow(long tenantId, LocalDate day) {
+        if (day == null) {
+            return null;
+        }
         return calendarDayMapper.selectOne(new LambdaQueryWrapper<DeptCalendarDay>()
                 .eq(DeptCalendarDay::getTenantId, tenantId)
                 .eq(DeptCalendarDay::getDay, day)
                 .last("limit 1"));
+    }
+
+    private DeptCalendarDay getRowOrNull(long tenantId, LocalDate day) {
+        return getCalendarRow(tenantId, day);
     }
 
     private void upsert(Long tenantId, int year, JieJiaRiApiClient.DayInfo info, String source) {
@@ -189,22 +264,20 @@ public class DeptCalendarService {
     }
 
     /**
-     * 国家「补班」等需要在周末/假日调为上班日：通过名称与常见接口文案识别。
-     * 无名称、仅误标 isOff=0 的周末按 {@link #isOffDayAfterCacheReady} 仍计为休息。
+     * jiejiari「周末」接口对普通周六/日固定返回 {@code isOffDay:false}＋「周六/周日」文案，不表示调休补班，不得参与判定。
      */
-    private static boolean isCompensatoryWorkdayLabel(String name) {
-        if (StringUtils.isBlank(name)) {
+    private static boolean isJieJiaWeekendListNoiseRow(DeptCalendarDay row) {
+        return row != null
+                && "WEEKENDS".equals(row.getSource())
+                && isJieJiaGenericWeekendLabel(row.getName());
+    }
+
+    private static boolean isJieJiaGenericWeekendLabel(String name) {
+        if (name == null) {
             return false;
         }
-        String n = name;
-        if (n.contains("补班")) {
-            return true;
-        }
-        if (n.contains("调休") && n.contains("班")) {
-            return true;
-        }
-        // 部分接口对补班日仅返回「班」
-        return "班".equals(n.trim());
+        String t = name.trim();
+        return "周六".equals(t) || "周日".equals(t) || "星期六".equals(t) || "星期日".equals(t);
     }
 
     private static Long tenantOrDefault() {

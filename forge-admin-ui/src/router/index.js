@@ -103,6 +103,69 @@ export const manualRoutes = [
     component: () => import('@/views/dept-daily/attendance.vue'),
     meta: { title: '考勤填报' },
   },
+  // 部门日常-个人工作月报
+  {
+    name: 'DeptDailyWorkReport',
+    path: '/dept-daily/work-report',
+    component: () => import('@/views/dept-daily/work-report.vue'),
+    meta: { title: '个人工作月报' },
+  },
+  // 部门日常-项目月报
+  {
+    name: 'DeptDailyProjectReport',
+    path: '/dept-daily/project-report',
+    component: () => import('@/views/dept-daily/project-report.vue'),
+    meta: { title: '项目月报' },
+  },
+  // 部门日常-项目与人员配置
+  {
+    name: 'DeptDailyProjectConfig',
+    path: '/dept-daily/project-config',
+    component: () => import('@/views/dept-daily/project-config.vue'),
+    meta: { title: '项目与人员配置' },
+  },
+  // 部门日常-考勤统览
+  {
+    name: 'DeptDailyAttendanceOverview',
+    path: '/dept-daily/attendance-overview',
+    redirect: '/dept-daily/attendance-table',
+    meta: { title: '考勤统览' },
+  },
+  // 部门日常-考勤一览表
+  {
+    name: 'DeptDailyAttendanceTable',
+    path: '/dept-daily/attendance-table',
+    component: () => import('@/views/dept-daily/attendance-table.vue'),
+    meta: { title: '考勤一览表' },
+  },
+  // 部门日常-未填报人员（考勤）
+  {
+    name: 'DeptDailyAttendanceUnfilled',
+    path: '/dept-daily/attendance-unfilled',
+    component: () => import('@/views/dept-daily/attendance-unfilled.vue'),
+    meta: { title: '未填报人员（考勤）' },
+  },
+  // 部门日常-月报统览
+  {
+    name: 'DeptDailyReportOverview',
+    path: '/dept-daily/report-overview',
+    redirect: '/dept-daily/report-user-overview',
+    meta: { title: '月报统览' },
+  },
+  // 部门日常-项目统览（项目进展）
+  {
+    name: 'DeptDailyReportProjectOverview',
+    path: '/dept-daily/report-project-overview',
+    component: () => import('@/views/dept-daily/report-project-overview.vue'),
+    meta: { title: '项目统览' },
+  },
+  // 部门日常-月报统览（员工月报统计）
+  {
+    name: 'DeptDailyReportUserOverview',
+    path: '/dept-daily/report-user-overview',
+    component: () => import('@/views/dept-daily/report-user-overview.vue'),
+    meta: { title: '月报统览' },
+  },
 ]
 
 // 从 unplugin-vue-router 自动生成的路由

@@ -15,6 +15,16 @@ public class AttendanceDayDTO {
     private String name;
 
     /**
+     * 是否公历周六、日（自然周末）
+     */
+    private Boolean weekend;
+
+    /**
+     * 是否调休补班日：自然周末但国家日历要求上班（{@code dept_calendar_day.is_off_day=0}）
+     */
+    private Boolean compensatoryWorkday;
+
+    /**
      * 是否休息日（含调休）
      */
     private Boolean offDay;

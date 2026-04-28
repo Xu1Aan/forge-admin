@@ -21,7 +21,7 @@
         </div>
         <p class="card-hint">
           <span class="card-hint__dot" aria-hidden="true" />
-          点击日期在「默认考勤 → 出差 → 请假」间循环；从出差进入请假时需选择类型。
+          点格：出勤态走 出差→请假→默认，休日先记成出勤。假种在右下角；请假时除角标外点格恢复默认。周末默认可休，调休/补班以日历为准。
         </p>
       </div>
 
@@ -67,8 +67,9 @@
             </n-button>
             <n-button
               type="success"
-              :disabled="isSubmitted"
+              :disabled="isSubmitted || isFutureMonth"
               :loading="submitLoading"
+              :title="isFutureMonth ? '仅可提交至当前月' : undefined"
               @click="handleSubmit"
             >
               提交本月
@@ -93,6 +94,18 @@
         class="attendance-spin"
       >
         <div class="cal-body">
+        <div class="cal-body__row">
+          <n-button
+            quaternary
+            class="cal-nav-btn"
+            :disabled="loading"
+            aria-label="上一月"
+            title="上一月"
+            @click="shiftMonth(-1)"
+          >
+            <i class="i-material-symbols:chevron-left cal-nav-ico" aria-hidden="true" />
+          </n-button>
+          <div class="cal-body__frame">
         <div v-if="!monthData && !loading" class="cal-placeholder">
           <n-empty description="选择年月或点击刷新" size="small" />
         </div>
@@ -123,11 +136,14 @@
               <div
                 v-if="cell.type === 'day'"
                 class="day-card"
-                :class="[statusClass(cell.day.status), { 'is-locked': isSubmitted }]"
+                :class="[
+                  statusClass(cell.day.status),
+                  { 'is-locked': isSubmitted, 'is-compensatory-day': cell.day.compensatoryWorkday },
+                ]"
                 role="button"
                 :tabindex="isSubmitted ? -1 : 0"
                 :aria-label="dayAriaLabel(cell.day)"
-                @click="handleDayClick(cell.day)"
+                @click="onDayCardClick($event, cell.day)"
                 @keydown="onCardKeydown($event, cell.day)"
               >
                 <div class="day-top">
@@ -144,11 +160,23 @@
                   </div>
                 </div>
 
-                <div v-if="cell.day.status === 'LEAVE'" class="day-sub day-sub--pill">
-                  {{ leaveTypeText(cell.day.leaveType) }}
+                <div
+                  v-if="cell.day.status === 'LEAVE'"
+                  class="day-leave-corner"
+                  :class="{ 'day-leave-corner--clickable': !isSubmitted }"
+                  :title="isSubmitted ? undefined : '点击编辑假种与备注'"
+                  @click.stop="onLeaveCornerClick(cell.day)"
+                >
+                  <span class="day-sub day-sub--pill day-leave-pill">
+                    {{ leaveTypeText(cell.day.leaveType || 'ANNUAL') }}
+                  </span>
                 </div>
-                <div v-else-if="cell.day.name" class="day-sub day-sub--muted">
-                  {{ cell.day.name }}
+                <div
+                  v-else-if="calendarSubline(cell.day)"
+                  class="day-sub day-sub--muted"
+                  :class="{ 'day-sub--tx': cell.day.compensatoryWorkday }"
+                >
+                  {{ calendarSubline(cell.day) }}
                 </div>
               </div>
 
@@ -156,25 +184,55 @@
             </div>
           </div>
         </div>
+          </div>
+          <n-button
+            quaternary
+            class="cal-nav-btn"
+            :disabled="loading"
+            aria-label="下一月"
+            title="下一月"
+            @click="shiftMonth(1)"
+          >
+            <i class="i-material-symbols:chevron-right cal-nav-ico" aria-hidden="true" />
+          </n-button>
+        </div>
         </div>
       </n-spin>
     </n-card>
 
-    <n-modal v-model:show="leaveModal.show" preset="card" title="请选择请假类型" style="width: 420px">
+    <n-modal
+      v-model:show="leaveModal.show"
+      preset="card"
+      title="编辑请假"
+      style="width: 440px"
+      @update:show="onLeaveModalShow"
+    >
       <n-form label-placement="left" label-width="90">
         <n-form-item label="请假类型">
-          <n-select v-model:value="leaveModal.leaveType" :options="leaveTypeOptions" placeholder="请选择" />
+          <n-select
+            v-model:value="leaveModal.leaveType"
+            :options="leaveTypeOptions"
+            placeholder="请选择"
+            :consistent-menu-width="false"
+          />
         </n-form-item>
         <n-form-item label="备注">
-          <n-input v-model:value="leaveModal.remark" placeholder="可选" />
+          <n-input
+            v-model:value="leaveModal.remark"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 5 }"
+            show-count
+            :maxlength="200"
+            placeholder="选填，如请假事由、流程单号等"
+          />
         </n-form-item>
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="leaveModal.show = false">
+          <n-button :disabled="leaveModal.loading" @click="cancelLeaveModal">
             取消
           </n-button>
-          <n-button type="primary" :loading="leaveModal.loading" @click="confirmLeave">
+          <n-button type="primary" :loading="leaveModal.loading" @click="confirmLeaveModal">
             确定
           </n-button>
         </n-space>
@@ -185,7 +243,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { getMonthView, oneClickFillMonth, submitMonth, toggleDay } from '@/api/dept-daily/attendance'
+import { getMonthView, oneClickFillMonth, submitMonth, toggleDay, updateAttendanceDay } from '@/api/dept-daily/attendance'
 
 defineOptions({ name: 'DeptDailyAttendance' })
 
@@ -220,12 +278,17 @@ const leaveModal = reactive({
   leaveType: null,
   remark: '',
   loading: false,
+  /** 关弹窗未确定时刷新格内展示 */
+  reloadOnClose: false,
 })
 
 const yearOptions = computed(() => {
   const y = now.getFullYear()
-  return Array.from({ length: 5 }).map((_, i) => {
-    const v = y - 2 + i
+  const sel = year.value ?? y
+  const from = Math.min(y - 2, sel)
+  const to = Math.max(y + 2, sel)
+  return Array.from({ length: to - from + 1 }, (_, i) => {
+    const v = from + i
     return { label: `${v}年`, value: v }
   })
 })
@@ -233,6 +296,20 @@ const yearOptions = computed(() => {
 const monthOptions = computed(() => Array.from({ length: 12 }).map((_, i) => ({ label: `${i + 1}月`, value: i + 1 })))
 
 const isSubmitted = computed(() => monthData.value?.status === 'SUBMITTED')
+
+/** 所选年月晚于当前年月时不可提交 */
+const isFutureMonth = computed(() => {
+  if (!year.value || !month.value)
+    return false
+  const d = new Date()
+  const cy = d.getFullYear()
+  const cm = d.getMonth() + 1
+  if (year.value > cy)
+    return true
+  if (year.value < cy)
+    return false
+  return month.value > cm
+})
 
 const monthLabel = computed(() => {
   if (!year.value || !month.value)
@@ -317,16 +394,45 @@ function dayNumber(yyyyMMdd) {
   return String(yyyyMMdd).slice(-2)
 }
 
+/**
+ * 节假日/调休副标题。出勤(WORK)与工作日表现一致：不展示仅「周几/噪声」等名称，避免周末记出勤时格子里多一行字。
+ * 调休补班日仍显示名称或「调休·须出勤」。
+ */
+function calendarSubline(day) {
+  if (!day || day.status === 'LEAVE')
+    return ''
+  if (day.status === 'WORK') {
+    if (day.compensatoryWorkday) {
+      if (day.name)
+        return day.name
+      return '调休·须出勤'
+    }
+    return ''
+  }
+  if (day.name)
+    return day.name
+  if (day.compensatoryWorkday)
+    return '调休·须出勤'
+  return ''
+}
+
 function dayAriaLabel(day) {
   if (!day?.date)
     return '日期'
   const d = dayNumber(day.date)
   const t = statusText(day.status)
   const extra = day.status === 'LEAVE'
-    ? leaveTypeText(day.leaveType)
-    : (day.name || '')
-  const state = isSubmitted.value ? '本月已提交，不可修改。' : '按回车或空格可切换。'
-  return `${year.value}年${month.value}月${d}日，${t}${extra ? '，' + extra : '。'}${state}`
+    ? leaveTypeText(day.leaveType || 'ANNUAL')
+    : (calendarSubline(day) || '')
+  const cal = day.compensatoryWorkday ? '调休补班日，' : ''
+  const state = isSubmitted.value
+    ? '本月已提交，不可修改。'
+    : (day.status === 'LEAVE'
+        ? '按回车或空格恢复为默认，右下角可编辑假种与备注。'
+        : (day.status === 'REST'
+            ? '按回车或空格可记为出勤。'
+            : '按回车或空格切换状态。'))
+  return `${year.value}年${month.value}月${d}日，${cal}${t}${extra ? '，' + extra : '。'}${state}`
 }
 
 function onCardKeydown(e, day) {
@@ -335,7 +441,11 @@ function onCardKeydown(e, day) {
   e.preventDefault()
   if (isSubmitted.value)
     return
-  handleDayClick(day)
+  if (day.status === 'LEAVE') {
+    void revertDayToDefault(day)
+    return
+  }
+  void advanceDayState(day)
 }
 
 async function loadView() {
@@ -357,6 +467,24 @@ function handleReload() {
   loadView()
 }
 
+/** 与顶部年月联动，用于左右切换月 */
+function shiftMonth(delta) {
+  let y = year.value
+  let m = month.value
+  m += delta
+  while (m < 1) {
+    m += 12
+    y -= 1
+  }
+  while (m > 12) {
+    m -= 12
+    y += 1
+  }
+  year.value = y
+  month.value = m
+  loadView()
+}
+
 async function handleOneClickFill() {
   oneClickLoading.value = true
   try {
@@ -374,6 +502,10 @@ async function handleOneClickFill() {
 }
 
 async function handleSubmit() {
+  if (isFutureMonth.value) {
+    window.$message?.warning('不能提交未到来的月份')
+    return
+  }
   submitLoading.value = true
   try {
     await submitMonth(year.value, month.value)
@@ -389,38 +521,120 @@ async function handleSubmit() {
   }
 }
 
-async function handleDayClick(day) {
+function getDayByDate(date) {
+  return monthData.value?.days?.find(d => d.date === date) || null
+}
+
+function onDayCardClick(e, day) {
   if (!day?.date) return
   if (isSubmitted.value) {
     window.$message?.warning('本月已提交，无法修改')
     return
   }
-
-  // 后端切换规则：默认 -> TRAVEL -> LEAVE -> 默认
-  // 这里做一次前端预判：从 TRAVEL 切到 LEAVE 时弹出请假类型选择
-  if (day.status === 'TRAVEL') {
-    leaveModal.show = true
-    leaveModal.date = day.date
-    leaveModal.leaveType = null
-    leaveModal.remark = day.remark || ''
+  if (e?.target?.closest?.('.day-leave-corner'))
+    return
+  if (day.status === 'LEAVE') {
+    void revertDayToDefault(day)
     return
   }
-  await doToggle(day.date, null, day.remark || '')
+  void advanceDayState(day)
 }
 
-async function confirmLeave() {
+/**
+ * 非请假态步进：休息日先记为出勤，再点走 toggle；出勤/已覆盖出勤后按「出差 → 请假 → 默认」循环。
+ * 出差→请假时带默认年假，不调弹窗。
+ */
+function advanceDayState(day) {
+  if (day.status === 'TRAVEL')
+    return doToggle(day.date, 'ANNUAL', null)
+  if (day.status === 'REST')
+    return putDayMerge(day, { status: 'WORK', leaveType: null, remark: null })
+  return doToggle(day.date, null, day.remark || null)
+}
+
+/** 从请假回到日历默认(出勤/休) */
+async function revertDayToDefault(day) {
+  return doToggle(day.date, null, null)
+}
+
+function onLeaveCornerClick(day) {
+  if (!day?.date || isSubmitted.value) return
+  openChangeLeaveTypeModal(day)
+}
+
+function openChangeLeaveTypeModal(day) {
+  leaveModal.date = day.date
+  leaveModal.leaveType = day.leaveType || 'ANNUAL'
+  leaveModal.remark = String(day.remark ?? '')
+  leaveModal.reloadOnClose = true
+  leaveModal.show = true
+}
+
+function onLeaveModalShow(show) {
+  if (show) return
+  if (leaveModal.reloadOnClose)
+    void loadView()
+  leaveModal.reloadOnClose = false
+}
+
+function cancelLeaveModal() {
+  leaveModal.show = false
+}
+
+async function confirmLeaveModal() {
   if (!leaveModal.date) return
+  const d = getDayByDate(leaveModal.date)
+  if (!d) {
+    leaveModal.show = false
+    return
+  }
   if (!leaveModal.leaveType) {
     window.$message?.warning('请选择请假类型')
     return
   }
+  const lt = leaveModal.leaveType
   leaveModal.loading = true
   try {
-    await doToggle(leaveModal.date, leaveModal.leaveType, leaveModal.remark)
-    leaveModal.show = false
+    const ok = await putDayMerge(d, { status: 'LEAVE', leaveType: lt, remark: leaveModal.remark })
+    if (ok) {
+      leaveModal.reloadOnClose = false
+      leaveModal.show = false
+    }
   }
   finally {
     leaveModal.loading = false
+  }
+}
+
+async function putDayMerge(day, { status, leaveType, remark }) {
+  if (!day?.date) return false
+  const remarkTrim = remark == null || remark === '' ? '' : String(remark).trim()
+  const body = {
+    date: day.date,
+    status,
+    leaveType: status === 'LEAVE' ? leaveType : null,
+    remark: remarkTrim.length ? remarkTrim : null,
+  }
+  try {
+    await updateAttendanceDay(year.value, month.value, body)
+    const idx = monthData.value?.days?.findIndex(x => x.date === day.date)
+    if (idx >= 0) {
+      const cur = monthData.value.days[idx]
+      const next = {
+        ...cur,
+        status,
+        leaveType: status === 'LEAVE' ? leaveType : null,
+        remark: body.remark,
+      }
+      monthData.value.days[idx] = next
+    }
+    return true
+  }
+  catch (e) {
+    console.error(e)
+    window.$message?.error(e?.response?.data?.message || e?.message || '操作失败')
+    await loadView()
+    return false
   }
 }
 
@@ -521,6 +735,35 @@ onMounted(() => {
 .cal-body {
   width: 100%;
   min-height: 320px;
+}
+
+.cal-body__row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.cal-body__frame {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 1688px;
+  width: 100%;
+}
+
+.cal-nav-btn {
+  flex-shrink: 0;
+  padding: 4px 2px;
+  border-radius: 10px;
+}
+
+.cal-nav-ico {
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  opacity: 0.8;
 }
 
 .cal-placeholder {
@@ -767,6 +1010,17 @@ onMounted(() => {
   border-color: rgba(29, 78, 216, 0.12);
 }
 
+/* 调休补班日：在「出勤」态下用左侧色条与平日区分
+.day-card.is-work.is-compensatory-day {
+  border-color: rgba(217, 119, 6, 0.35);
+  box-shadow: inset 3px 0 0 0 #d97706;
+} */
+
+.day-sub--tx {
+  color: #b45309;
+  font-weight: 600;
+}
+
 .day-card.is-travel {
   background: #ffecef;
   color: #be123c;
@@ -777,6 +1031,32 @@ onMounted(() => {
   background: #3f4d6a;
   color: #fff;
   border-color: rgba(255, 255, 255, 0.16);
+}
+
+.day-leave-corner {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  padding-top: 2px;
+}
+
+.day-leave-corner--clickable {
+  cursor: pointer;
+  border-radius: 8px;
+  outline: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .day-leave-corner--clickable:hover .day-leave-pill {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
+
+.day-leave-pill {
+  text-align: right;
+  max-width: 100%;
 }
 
 .dark .card-head {
@@ -799,6 +1079,11 @@ onMounted(() => {
   border-color: #334155;
   background: #0f172a;
 }
+.dark .cal-nav-ico {
+  opacity: 0.95;
+  color: #cbd5e1;
+}
+
 .dark .calendar {
   border-color: #334155;
 }
@@ -832,6 +1117,13 @@ onMounted(() => {
 .dark .day-card.is-work {
   background: rgba(59, 130, 246, 0.12);
   color: #93c5fd;
+}
+.dark .day-card.is-work.is-compensatory-day {
+  border-color: rgba(251, 191, 36, 0.4);
+  box-shadow: inset 3px 0 0 0 #fbbf24;
+}
+.dark .day-sub--tx {
+  color: #fcd34d;
 }
 .dark .day-card.is-travel {
   background: rgba(244, 63, 94, 0.14);

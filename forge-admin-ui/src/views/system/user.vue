@@ -65,6 +65,7 @@
           :edit-grid-cols="2"
           modal-width="900px"
           add-button-text="新增用户"
+          @selection-change="handleSelectionChange"
         >
           <!-- 自定义工具栏提示 -->
           <template #toolbar-start>
@@ -73,6 +74,21 @@
                 当前筛选：{{ selectedOrgNode.orgName }}
               </NTag>
             </div>
+          </template>
+
+          <template #toolbar-end>
+            <n-button
+              size="small"
+              type="primary"
+              secondary
+              :disabled="selectedUsers.length === 0"
+              @click="handleBatchAuth"
+            >
+              <template #icon>
+                <i class="i-material-symbols:admin-panel-settings-rounded" />
+              </template>
+              一键授权<span v-if="selectedUsers.length > 0">（已选{{ selectedUsers.length }}人）</span>
+            </n-button>
           </template>
         </AiCrudPage>
       </div>
@@ -116,7 +132,7 @@
     <!-- 授权弹窗 -->
     <n-modal
       v-model:show="authModalVisible"
-      :title="`用户授权 - ${currentUser.username || ''}`"
+      :title="authModalTitle"
       preset="card"
       style="width: 700px"
       :mask-closable="false"
@@ -292,11 +308,20 @@ const authModalVisible = ref(false)
 const authLoading = ref(false)
 const authSubmitLoading = ref(false)
 const currentUser = ref({})
+const isBatchAuth = ref(false)
+const selectedUsers = ref([])
 const roleTreeData = ref([])
 const checkedRoleKeys = ref([])
 const treeExpandAll = ref(true)
 const treeExpandedKeys = ref([])
 const checkStrictly = ref(false)
+
+const authModalTitle = computed(() => {
+  if (isBatchAuth.value) {
+    return `批量授权（${selectedUsers.value.length}人）`
+  }
+  return `用户授权 - ${currentUser.value.username || ''}`
+})
 
 // 重置密码相关
 const resetPwdModalVisible = ref(false)
@@ -837,11 +862,43 @@ function handleDelete(row) {
 
 // 授权
 async function handleAuth(row) {
+  isBatchAuth.value = false
+  selectedUsers.value = []
   currentUser.value = row
   authModalVisible.value = true
 
   await loadRoleList()
   await loadUserRoles(row.id)
+}
+
+function handleSelectionChange({ rows }) {
+  selectedUsers.value = rows || []
+}
+
+async function handleBatchAuth() {
+  const rows = crudRef.value?.getSelectedRows?.() || selectedUsers.value || []
+  if (!rows || rows.length === 0) {
+    window.$message.warning('请先选择要授权的用户')
+    return
+  }
+
+  // 系统内置管理员通常禁止授权/改动，这里直接过滤掉并提示
+  const filtered = rows.filter(r => r?.id !== 1)
+  if (filtered.length === 0) {
+    window.$message.warning('已选用户均不可授权')
+    return
+  }
+  if (filtered.length !== rows.length) {
+    window.$message.warning('已自动跳过系统内置用户')
+  }
+
+  isBatchAuth.value = true
+  selectedUsers.value = filtered
+  currentUser.value = {}
+  checkedRoleKeys.value = []
+  authModalVisible.value = true
+
+  await loadRoleList()
 }
 
 // 加载角色列表
@@ -932,14 +989,49 @@ function handleCheckStrictlyChange(value) {
 async function handleSubmitAuth() {
   try {
     authSubmitLoading.value = true
-    const res = await request.post(
-      `/system/user/${currentUser.value.id}/roles`,
-      checkedRoleKeys.value,
-    )
-    if (res.code === 200) {
-      window.$message.success('授权成功')
-      authModalVisible.value = false
+
+    if (!isBatchAuth.value) {
+      const res = await request.post(
+        `/system/user/${currentUser.value.id}/roles`,
+        checkedRoleKeys.value,
+      )
+      if (res.code === 200) {
+        window.$message.success('授权成功')
+        authModalVisible.value = false
+      }
+      return
     }
+
+    const users = selectedUsers.value || []
+    if (users.length === 0) {
+      window.$message.warning('请先选择要授权的用户')
+      return
+    }
+
+    const failed = []
+    for (const user of users) {
+      try {
+        const res = await request.post(`/system/user/${user.id}/roles`, checkedRoleKeys.value)
+        if (res.code !== 200) {
+          failed.push({ user, msg: res.msg || '授权失败' })
+        }
+      }
+      catch (e) {
+        failed.push({ user, msg: '授权失败' })
+      }
+    }
+
+    const successCount = users.length - failed.length
+    if (failed.length === 0) {
+      window.$message.success(`批量授权成功（${successCount}/${users.length}）`)
+    }
+    else {
+      window.$message.warning(`批量授权完成：成功${successCount}，失败${failed.length}`)
+      console.error('批量授权失败明细:', failed)
+    }
+
+    authModalVisible.value = false
+    crudRef.value?.clearSelection?.()
   }
   catch (error) {
     console.error('授权失败:', error)

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyProjectReportOverviewMapper">
+    <select id="selectProjectProgressPage" resultType="com.mdframe.forge.plugin.deptdaily.overview.vo.ProjectProgressRowVO">
+        SELECT
+            p.id AS projectId,
+            p.project_name AS projectName,
+            p.leader_user_id AS leaderUserId,
+            COALESCE(NULLIF(u.real_name, ''), u.username) AS leaderName,
+            r.report_ym AS reportYm,
+            r.summary_text AS summaryText,
+            r.status AS status,
+            r.id AS reportId
+        FROM dept_daily_project p
+        LEFT JOIN dept_daily_project_month_report r
+          ON r.tenant_id = p.tenant_id
+         AND r.project_id = p.id
+         AND r.report_ym = #{reportYm}
+        LEFT JOIN sys_user u
+          ON u.tenant_id = p.tenant_id
+         AND u.id = p.leader_user_id
+        WHERE p.tenant_id = #{tenantId}
+        <if test="deptId != null">
+            AND p.dept_id = #{deptId}
+        </if>
+        <if test="officeId != null">
+            AND p.office_id = #{officeId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (p.project_name LIKE CONCAT('%', #{keyword}, '%')
+              OR u.username LIKE CONCAT('%', #{keyword}, '%')
+              OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY p.plan_end_date ASC, p.id DESC
+    </select>
+</mapper>
+

@@ -99,11 +99,16 @@ public class DeptAttendanceService {
             boolean off = calendarService.isOffDayForRow(date, calRow);
             String defaultStatus = off ? AttendanceDayStatus.REST : AttendanceDayStatus.WORK;
             String name = calendarService.dayNameForRow(date, calRow);
+            if (calendarService.isCompensatoryWorkday(date, calRow) && StringUtils.isBlank(name)) {
+                name = "调休(上班)";
+            }
 
             DeptAttendanceItem override = itemByDate.get(date);
 
             AttendanceDayDTO dto = new AttendanceDayDTO();
             dto.setDate(date.format(DF));
+            dto.setWeekend(calendarService.isNaturalWeekend(date));
+            dto.setCompensatoryWorkday(calendarService.isCompensatoryWorkday(date, calRow));
             dto.setName(name);
             dto.setOffDay(off);
             dto.setDefaultStatus(defaultStatus);
@@ -212,9 +217,14 @@ public class DeptAttendanceService {
             throw new IllegalArgumentException("date不在指定年月内");
         }
 
-        boolean off = calendarService.isOffDay(date);
+        calendarService.ensureYearCached(date.getYear());
+        DeptCalendarDay calRow = calendarService.getCalendarRow(tenantId, date);
+        boolean off = calendarService.isOffDayForRow(date, calRow);
         String defaultStatus = off ? AttendanceDayStatus.REST : AttendanceDayStatus.WORK;
-        String dayName = calendarService.getDayName(date);
+        String dayName = calendarService.dayNameForRow(date, calRow);
+        if (calendarService.isCompensatoryWorkday(date, calRow) && StringUtils.isBlank(dayName)) {
+            dayName = "调休(上班)";
+        }
 
         DeptAttendanceItem existing = itemMapper.selectOne(new LambdaQueryWrapper<DeptAttendanceItem>()
                 .eq(DeptAttendanceItem::getTenantId, tenantId)
@@ -266,6 +276,8 @@ public class DeptAttendanceService {
 
         AttendanceDayDTO dto = new AttendanceDayDTO();
         dto.setDate(date.format(DF));
+        dto.setWeekend(calendarService.isNaturalWeekend(date));
+        dto.setCompensatoryWorkday(calendarService.isCompensatoryWorkday(date, calRow));
         dto.setName(dayName);
         dto.setOffDay(off);
         dto.setDefaultStatus(defaultStatus);
@@ -277,6 +289,10 @@ public class DeptAttendanceService {
 
     @Transactional(rollbackFor = Exception.class)
     public void submit(int year, int month) {
+        YearMonth target = YearMonth.of(year, month);
+        if (target.isAfter(YearMonth.now())) {
+            throw new IllegalArgumentException("不能提交未到来的月份");
+        }
         DeptAttendanceSheet sheet = oneClickFill(year, month);
         if ("SUBMITTED".equals(sheet.getStatus())) {
             return;

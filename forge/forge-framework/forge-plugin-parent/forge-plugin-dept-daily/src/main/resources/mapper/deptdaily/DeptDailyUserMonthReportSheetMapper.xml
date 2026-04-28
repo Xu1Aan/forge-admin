@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyUserMonthReportSheetMapper">
+    <select id="selectUserMonthReportStatPage" resultType="com.mdframe.forge.plugin.deptdaily.overview.vo.UserMonthReportStatRowVO">
+        SELECT
+            sh.user_id AS userId,
+            u.username AS username,
+            u.real_name AS realName,
+            COALESCE(sh.employee_type, u.employee_type) AS employeeType,
+            sh.report_ym AS reportYm,
+            sh.status AS status,
+            COALESCE(it.cnt, 0) AS projectCount
+        FROM dept_daily_user_month_report_sheet sh
+        LEFT JOIN sys_user u
+          ON u.tenant_id = sh.tenant_id
+         AND u.id = sh.user_id
+        LEFT JOIN (
+            SELECT tenant_id, report_ym, user_id, COUNT(DISTINCT project_id) AS cnt
+            FROM dept_daily_user_month_report_item
+            GROUP BY tenant_id, report_ym, user_id
+        ) it ON it.tenant_id = sh.tenant_id AND it.report_ym = sh.report_ym AND it.user_id = sh.user_id
+        WHERE sh.tenant_id = #{tenantId}
+          AND sh.report_ym = #{reportYm}
+        <if test="deptId != null">
+            AND sh.dept_id = #{deptId}
+        </if>
+        <if test="officeId != null">
+            AND sh.office_id = #{officeId}
+        </if>
+        <if test="employeeType != null">
+            AND sh.employee_type = #{employeeType}
+        </if>
+        <if test="status != null and status != ''">
+            AND sh.status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (u.username LIKE CONCAT('%', #{keyword}, '%')
+              OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY sh.status ASC, u.real_name ASC, u.username ASC, sh.user_id ASC
+    </select>
+</mapper>
+

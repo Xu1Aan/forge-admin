@@ -16,7 +16,13 @@ import java.util.Iterator;
 import java.util.Map;
 
 /**
- * 第三方节假日接口客户端（https://api.jiejiariapi.com）
+ * 第三方节假日接口客户端（https://api.jiejiariapi.com）。
+ * <p>
+ * 注意：{@code /v1/weekends} 对公历各周六/日普遍带 {@code isOffDay:false}＋“周六/周日”文案，含义与
+ * 节假日接口中的“休息日/工作日”<strong>不可混用</strong>。业务上请以 {@code /v1/holidays} 与本地规则为主，
+ * 周末列表仅作补充且需在 {@link DeptCalendarService#refreshYear(int)} 中过滤，避免覆盖法定假、误将普通周末标成“须上班”。
+ * <p>
+ * 周末调休补班等完整 {@code name} 以 {@code /v1/workdays} 为准，应在 {@link DeptCalendarService#refreshYear(int)} 中最后合并。
  */
 @Component
 @RequiredArgsConstructor
@@ -33,6 +39,13 @@ public class JieJiaRiApiClient {
     public Map<String, DayInfo> fetchWeekends(int year) {
         String url = "https://api.jiejiariapi.com/v1/weekends/" + year;
         return fetchMap(url);
+    }
+
+    /**
+     * 全年须上班日（含因调休而在周末上班的日期），与在线文档一致时 {@code name} 最完整。
+     */
+    public Map<String, DayInfo> fetchWorkdays(int year) {
+        return fetchMap("https://api.jiejiariapi.com/v1/workdays/" + year);
     }
 
     private Map<String, DayInfo> fetchMap(String url) {

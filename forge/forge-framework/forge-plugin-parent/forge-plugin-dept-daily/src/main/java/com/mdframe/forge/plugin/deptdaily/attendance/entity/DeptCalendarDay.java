@@ -35,7 +35,7 @@ public class DeptCalendarDay extends TenantEntity {
     private Integer isOffDay;
 
     /**
-     * 来源：HOLIDAYS/WEEKENDS
+     * 来源：HOLIDAYS / WEEKENDS / WORKDAYS
      */
     private String source;
 }

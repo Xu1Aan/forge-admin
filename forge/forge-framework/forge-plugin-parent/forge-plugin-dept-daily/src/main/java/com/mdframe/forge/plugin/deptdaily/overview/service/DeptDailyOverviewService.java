@@ -1,0 +1,409 @@
+package com.mdframe.forge.plugin.deptdaily.overview.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mdframe.forge.plugin.deptdaily.attendance.entity.DeptAttendanceItem;
+import com.mdframe.forge.plugin.deptdaily.attendance.entity.DeptAttendanceSheet;
+import com.mdframe.forge.plugin.deptdaily.attendance.enums.AttendanceDayStatus;
+import com.mdframe.forge.plugin.deptdaily.attendance.mapper.DeptAttendanceItemMapper;
+import com.mdframe.forge.plugin.deptdaily.attendance.mapper.DeptAttendanceSheetMapper;
+import com.mdframe.forge.plugin.deptdaily.attendance.service.DeptCalendarService;
+import com.mdframe.forge.plugin.deptdaily.overview.entity.DeptDailyReportSetting;
+import com.mdframe.forge.plugin.deptdaily.overview.entity.DeptDailyFillState;
+import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailySysOrgLiteMapper;
+import com.mdframe.forge.plugin.deptdaily.overview.entity.DeptDailySysUserLite;
+import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyFillStateMapper;
+import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyProjectReportOverviewMapper;
+import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyReportSettingMapper;
+import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailySysUserLiteMapper;
+import com.mdframe.forge.plugin.deptdaily.overview.mapper.DeptDailyUserMonthReportSheetMapper;
+import com.mdframe.forge.plugin.deptdaily.overview.vo.AttendanceMonthTableRowVO;
+import com.mdframe.forge.plugin.deptdaily.overview.vo.FillStateRowVO;
+import com.mdframe.forge.plugin.deptdaily.overview.vo.ProjectProgressRowVO;
+import com.mdframe.forge.plugin.deptdaily.overview.vo.UserMonthReportStatRowVO;
+import com.mdframe.forge.starter.core.domain.PageQuery;
+import com.mdframe.forge.starter.core.session.SessionHelper;
+import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+@RequiredArgsConstructor
+public class DeptDailyOverviewService {
+
+    private static final DateTimeFormatter YM_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+
+    private final DeptDailyReportSettingMapper settingMapper;
+    private final DeptDailyFillStateMapper fillStateMapper;
+    private final DeptDailyUserMonthReportSheetMapper userSheetMapper;
+    private final DeptDailyProjectReportOverviewMapper projectProgressMapper;
+    private final DeptDailySysUserLiteMapper userLiteMapper;
+    private final DeptDailySysOrgLiteMapper orgLiteMapper;
+    private final DeptAttendanceSheetMapper attendanceSheetMapper;
+    private final DeptAttendanceItemMapper attendanceItemMapper;
+    private final DeptCalendarService calendarService;
+
+    public DeptDailyReportSetting getSetting(Long deptId, Long officeId, Integer employeeType) {
+        Long tenantId = tenantOrDefault();
+        return settingMapper.selectOne(new LambdaQueryWrapper<DeptDailyReportSetting>()
+                .eq(DeptDailyReportSetting::getTenantId, tenantId)
+                .eq(deptId != null, DeptDailyReportSetting::getDeptId, deptId)
+                .isNull(deptId == null, DeptDailyReportSetting::getDeptId)
+                .eq(officeId != null, DeptDailyReportSetting::getOfficeId, officeId)
+                .isNull(officeId == null, DeptDailyReportSetting::getOfficeId)
+                .eq(employeeType != null, DeptDailyReportSetting::getEmployeeType, employeeType)
+                .isNull(employeeType == null, DeptDailyReportSetting::getEmployeeType)
+                .last("limit 1"));
+    }
+
+    public void saveSetting(DeptDailyReportSetting req) {
+        if (req == null) throw new IllegalArgumentException("参数不能为空");
+        Long tenantId = tenantOrDefault();
+
+        DeptDailyReportSetting existing = getSetting(req.getDeptId(), req.getOfficeId(), req.getEmployeeType());
+        if (existing == null) {
+            DeptDailyReportSetting s = new DeptDailyReportSetting();
+            s.setTenantId(tenantId);
+            s.setDeptId(req.getDeptId());
+            s.setOfficeId(req.getOfficeId());
+            s.setEmployeeType(req.getEmployeeType());
+            s.setAttendanceStartYm(StringUtils.trimToNull(req.getAttendanceStartYm()));
+            s.setWorkReportStartYm(StringUtils.trimToNull(req.getWorkReportStartYm()));
+            s.setProjectReportStartYm(StringUtils.trimToNull(req.getProjectReportStartYm()));
+            settingMapper.insert(s);
+            return;
+        }
+        existing.setAttendanceStartYm(StringUtils.trimToNull(req.getAttendanceStartYm()));
+        existing.setWorkReportStartYm(StringUtils.trimToNull(req.getWorkReportStartYm()));
+        existing.setProjectReportStartYm(StringUtils.trimToNull(req.getProjectReportStartYm()));
+        settingMapper.updateById(existing);
+    }
+
+    public IPage<FillStateRowVO> pageFillState(PageQuery pageQuery, String module, String ym,
+                                               Long deptId, Long officeId, Integer employeeType,
+                                               String status, String keyword) {
+        Long tenantId = tenantOrDefault();
+        return fillStateMapper.selectFillStatePage(
+                pageQuery.toPage(),
+                tenantId,
+                module,
+                ym,
+                deptId,
+                officeId,
+                employeeType,
+                StringUtils.trimToNull(status),
+                StringUtils.trimToNull(keyword)
+        );
+    }
+
+    public IPage<ProjectProgressRowVO> pageProjectProgress(PageQuery pageQuery, String reportYm,
+                                                           Long deptId, Long officeId, String keyword) {
+        Long tenantId = tenantOrDefault();
+        return projectProgressMapper.selectProjectProgressPage(
+                pageQuery.toPage(),
+                tenantId,
+                reportYm,
+                deptId,
+                officeId,
+                StringUtils.trimToNull(keyword)
+        );
+    }
+
+    public IPage<UserMonthReportStatRowVO> pageUserMonthReportStat(PageQuery pageQuery, String reportYm,
+                                                                   Long deptId, Long officeId,
+                                                                   Integer employeeType, String status,
+                                                                   String keyword) {
+        Long tenantId = tenantOrDefault();
+        return userSheetMapper.selectUserMonthReportStatPage(
+                pageQuery.toPage(),
+                tenantId,
+                reportYm,
+                deptId,
+                officeId,
+                employeeType,
+                StringUtils.trimToNull(status),
+                StringUtils.trimToNull(keyword)
+        );
+    }
+
+    /**
+     * 考勤一览表：本部门及下属部门（默认主组织）人员的按月明细（1..31）+ 汇总统计。
+     */
+    public IPage<AttendanceMonthTableRowVO> pageAttendanceMonthTable(PageQuery pageQuery, int year, int month,
+                                                                     Long deptId, Long officeId,
+                                                                     Integer employeeType, String keyword) {
+        Long tenantId = tenantOrDefault();
+
+        Long scopeOrgId = resolveScopeOrgId(deptId, officeId);
+        List<Long> scopeOrgIds = null;
+        if (scopeOrgId != null) {
+            scopeOrgIds = orgLiteMapper.selectDescendantOrgIds(tenantId, scopeOrgId);
+        }
+
+        LambdaQueryWrapper<DeptDailySysUserLite> uw = new LambdaQueryWrapper<DeptDailySysUserLite>()
+                .eq(DeptDailySysUserLite::getTenantId, tenantId)
+                .eq(DeptDailySysUserLite::getUserStatus, 1)
+                .eq(employeeType != null, DeptDailySysUserLite::getEmployeeType, employeeType);
+        if (scopeOrgIds != null && !scopeOrgIds.isEmpty()) {
+            uw.in(DeptDailySysUserLite::getCreateDept, scopeOrgIds);
+        } else if (scopeOrgId != null) {
+            uw.eq(DeptDailySysUserLite::getCreateDept, scopeOrgId);
+        }
+        String kw = StringUtils.trimToNull(keyword);
+        if (kw != null) {
+            uw.and(w -> w.like(DeptDailySysUserLite::getUsername, kw).or().like(DeptDailySysUserLite::getRealName, kw));
+        }
+        uw.orderByAsc(DeptDailySysUserLite::getId);
+
+        Page<DeptDailySysUserLite> userPage = userLiteMapper.selectPage(pageQuery.toPage(), uw);
+
+        List<DeptDailySysUserLite> users = userPage.getRecords();
+        if (users == null || users.isEmpty()) {
+            Page<AttendanceMonthTableRowVO> empty = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
+            empty.setRecords(List.of());
+            return empty;
+        }
+
+        List<Long> userIds = users.stream().map(DeptDailySysUserLite::getId).toList();
+        Map<Long, DeptDailySysUserLite> userById = new HashMap<>(users.size() * 2);
+        for (DeptDailySysUserLite u : users) userById.put(u.getId(), u);
+
+        // 月度 sheet（用于 SUBMITTED/DRAFT/NONE）
+        Map<Long, DeptAttendanceSheet> sheetByUser = new HashMap<>(users.size() * 2);
+        List<DeptAttendanceSheet> sheets = attendanceSheetMapper.selectList(new LambdaQueryWrapper<DeptAttendanceSheet>()
+                .eq(DeptAttendanceSheet::getTenantId, tenantId)
+                .eq(DeptAttendanceSheet::getYear, year)
+                .eq(DeptAttendanceSheet::getMonth, month)
+                .in(DeptAttendanceSheet::getUserId, userIds));
+        if (sheets != null) {
+            for (DeptAttendanceSheet s : sheets) sheetByUser.put(s.getUserId(), s);
+        }
+
+        // 明细覆盖项（仅保存非默认项）
+        YearMonth ym = YearMonth.of(year, month);
+        LocalDate start = ym.atDay(1);
+        LocalDate end = ym.atEndOfMonth();
+        List<DeptAttendanceItem> items = attendanceItemMapper.selectList(new LambdaQueryWrapper<DeptAttendanceItem>()
+                .eq(DeptAttendanceItem::getTenantId, tenantId)
+                .in(DeptAttendanceItem::getUserId, userIds)
+                .ge(DeptAttendanceItem::getWorkDate, start)
+                .le(DeptAttendanceItem::getWorkDate, end));
+        Map<Long, Map<LocalDate, DeptAttendanceItem>> itemMap = new HashMap<>(users.size() * 2);
+        if (items != null) {
+            for (DeptAttendanceItem it : items) {
+                if (it.getUserId() == null || it.getWorkDate() == null) continue;
+                itemMap.computeIfAbsent(it.getUserId(), k -> new HashMap<>()).put(it.getWorkDate(), it);
+            }
+        }
+
+        // 默认日历（是否休息）
+        calendarService.ensureYearCached(year);
+        Map<LocalDate, com.mdframe.forge.plugin.deptdaily.attendance.entity.DeptCalendarDay> calByDay = calendarService.monthCalendarMap(tenantId, year, month);
+        int daysInMonth = ym.lengthOfMonth();
+
+        List<AttendanceMonthTableRowVO> outRows = new ArrayList<>(users.size());
+        for (Long uid : userIds) {
+            DeptDailySysUserLite u = userById.get(uid);
+            DeptAttendanceSheet sh = sheetByUser.get(uid);
+            Map<LocalDate, DeptAttendanceItem> overrides = itemMap.get(uid);
+
+            List<String> dayList = new java.util.ArrayList<>(31);
+            int work = 0, rest = 0, travel = 0, leave = 0;
+
+            for (int d = 1; d <= 31; d++) {
+                if (d > daysInMonth) {
+                    dayList.add("");
+                    continue;
+                }
+                LocalDate date = ym.atDay(d);
+                var calRow = calByDay.get(date);
+                boolean off = isOffDayForRowLocal(date, calRow);
+                String defaultStatus = off ? AttendanceDayStatus.REST : AttendanceDayStatus.WORK;
+
+                String effective = defaultStatus;
+                if (overrides != null) {
+                    DeptAttendanceItem ov = overrides.get(date);
+                    if (ov != null && StringUtils.isNotBlank(ov.getDayStatus())) {
+                        effective = ov.getDayStatus();
+                    }
+                }
+                dayList.add(effective);
+                if (AttendanceDayStatus.WORK.equals(effective)) work++;
+                else if (AttendanceDayStatus.REST.equals(effective)) rest++;
+                else if (AttendanceDayStatus.TRAVEL.equals(effective)) travel++;
+                else if (AttendanceDayStatus.LEAVE.equals(effective)) leave++;
+            }
+
+            AttendanceMonthTableRowVO r = new AttendanceMonthTableRowVO();
+            r.setUserId(uid);
+            r.setUsername(u != null ? u.getUsername() : null);
+            r.setRealName(u != null ? u.getRealName() : null);
+            r.setEmployeeType(u != null ? u.getEmployeeType() : null);
+            r.setSheetStatus(sh != null ? sh.getStatus() : "NONE");
+            r.setWorkDays(work);
+            r.setRestDays(rest);
+            r.setTravelDays(travel);
+            r.setLeaveDays(leave);
+            r.setDays(dayList);
+            outRows.add(r);
+        }
+
+        Page<AttendanceMonthTableRowVO> out = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
+        out.setRecords(outRows);
+        return out;
+    }
+
+    /**
+     * 复刻 {@code DeptCalendarService#isOffDayForRow} 逻辑（原方法为包可见，这里无法直接调用）。
+     */
+    private static boolean isOffDayForRowLocal(LocalDate date, com.mdframe.forge.plugin.deptdaily.attendance.entity.DeptCalendarDay row) {
+        if (date == null) return false;
+        boolean weekend = date.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || date.getDayOfWeek() == java.time.DayOfWeek.SUNDAY;
+        boolean base = weekend; // 平日基线=上班(false)，周末基线=休(true)
+        if (row == null || row.getIsOffDay() == null) return base;
+        if (weekend) {
+            // 兼容历史 WEEKENDS 噪声行（仅名称为“周六/周日”的误导条目）
+            String name = row.getName();
+            if ("WEEKENDS".equals(row.getSource()) && ("周六".equals(name) || "周日".equals(name))) {
+                return true;
+            }
+            return row.getIsOffDay() == 1;
+        }
+        return row.getIsOffDay() == 1;
+    }
+
+    /**
+     * 按起始年月批量刷新 fill_state（面向统览/未填报列表），避免查询时做大规模补齐计算。
+     * <p>
+     * module: ATTENDANCE / WORK_REPORT
+     *
+     * @return upsert 行数（近似）
+     */
+    public int refreshFillState(String module, Long deptId, Long officeId, Integer employeeType, String startYm, String endYm) {
+        if (StringUtils.isBlank(module)) throw new IllegalArgumentException("module不能为空");
+        if (StringUtils.isBlank(startYm)) throw new IllegalArgumentException("startYm不能为空");
+        Long tenantId = tenantOrDefault();
+
+        YearMonth start = YearMonth.parse(startYm, YM_FMT);
+        YearMonth end = (StringUtils.isBlank(endYm) ? YearMonth.now() : YearMonth.parse(endYm, YM_FMT));
+        YearMonth now = YearMonth.now();
+        if (end.isAfter(now)) end = now;
+        if (start.isAfter(end)) return 0;
+
+        // 组织范围：默认主组织（本部门），包含所有下属部门
+        Long scopeOrgId = resolveScopeOrgId(deptId, officeId);
+        List<Long> scopeOrgIds = null;
+        if (scopeOrgId != null) {
+            scopeOrgIds = orgLiteMapper.selectDescendantOrgIds(tenantId, scopeOrgId);
+        }
+
+        // 用户集合：按 tenant + employeeType + org范围（sys_user.create_dept）
+        LambdaQueryWrapper<DeptDailySysUserLite> uw = new LambdaQueryWrapper<DeptDailySysUserLite>()
+                .eq(DeptDailySysUserLite::getTenantId, tenantId)
+                .eq(employeeType != null, DeptDailySysUserLite::getEmployeeType, employeeType)
+                .eq(DeptDailySysUserLite::getUserStatus, 1);
+        if (scopeOrgIds != null && !scopeOrgIds.isEmpty()) {
+            uw.in(DeptDailySysUserLite::getCreateDept, scopeOrgIds);
+        } else if (scopeOrgId != null) {
+            // 极端情况：orgLiteMapper 返回空时兜底
+            uw.eq(DeptDailySysUserLite::getCreateDept, scopeOrgId);
+        }
+        List<DeptDailySysUserLite> users = userLiteMapper.selectList(uw);
+        if (users == null || users.isEmpty()) return 0;
+
+        List<Long> userIds = users.stream().map(DeptDailySysUserLite::getId).toList();
+        Map<Long, DeptDailySysUserLite> userById = new HashMap<>(users.size() * 2);
+        for (DeptDailySysUserLite u : users) userById.put(u.getId(), u);
+
+        int total = 0;
+        YearMonth cur = start;
+        while (!cur.isAfter(end)) {
+            String ym = cur.format(YM_FMT);
+            LocalDateTime ts = LocalDateTime.now();
+
+            Map<Long, String> statusByUser = new HashMap<>(userIds.size() * 2);
+            if ("ATTENDANCE".equalsIgnoreCase(module)) {
+                List<DeptAttendanceSheet> sheets = attendanceSheetMapper.selectList(new LambdaQueryWrapper<DeptAttendanceSheet>()
+                        .eq(DeptAttendanceSheet::getTenantId, tenantId)
+                        .eq(DeptAttendanceSheet::getYear, cur.getYear())
+                        .eq(DeptAttendanceSheet::getMonth, cur.getMonthValue())
+                        .in(DeptAttendanceSheet::getUserId, userIds));
+                if (sheets != null) {
+                    for (DeptAttendanceSheet s : sheets) {
+                        statusByUser.put(s.getUserId(), s.getStatus());
+                    }
+                }
+            } else if ("WORK_REPORT".equalsIgnoreCase(module)) {
+                // 个人月报总表：DRAFT/SUBMITTED
+                List<com.mdframe.forge.plugin.deptdaily.overview.entity.DeptDailyUserMonthReportSheet> sheets =
+                        userSheetMapper.selectList(new LambdaQueryWrapper<com.mdframe.forge.plugin.deptdaily.overview.entity.DeptDailyUserMonthReportSheet>()
+                                .eq(com.mdframe.forge.plugin.deptdaily.overview.entity.DeptDailyUserMonthReportSheet::getTenantId, tenantId)
+                                .eq(com.mdframe.forge.plugin.deptdaily.overview.entity.DeptDailyUserMonthReportSheet::getReportYm, ym)
+                                .in(com.mdframe.forge.plugin.deptdaily.overview.entity.DeptDailyUserMonthReportSheet::getUserId, userIds));
+                if (sheets != null) {
+                    for (var s : sheets) {
+                        statusByUser.put(s.getUserId(), s.getStatus());
+                    }
+                }
+            } else {
+                throw new IllegalArgumentException("暂不支持的module: " + module);
+            }
+
+            // 组装 upsert 批次
+            List<DeptDailyFillState> batch = new ArrayList<>(userIds.size());
+            for (Long uid : userIds) {
+                DeptDailySysUserLite u = userById.get(uid);
+                DeptDailyFillState st = new DeptDailyFillState();
+                st.setTenantId(tenantId);
+                st.setDeptId(scopeOrgId);
+                st.setOfficeId(null);
+                st.setEmployeeType(u != null ? u.getEmployeeType() : null);
+                st.setModule(module.toUpperCase());
+                st.setYear(cur.getYear());
+                st.setMonth(cur.getMonthValue());
+                st.setYm(ym);
+                st.setUserId(uid);
+                st.setStatus(statusByUser.getOrDefault(uid, "NONE"));
+                st.setLastCalcTime(ts);
+                st.setUpdateTime(ts);
+                st.setUpdateBy(SessionHelper.getUserId());
+                batch.add(st);
+            }
+
+            // 分批 upsert，避免超大 SQL
+            final int chunkSize = 500;
+            for (int i = 0; i < batch.size(); i += chunkSize) {
+                int j = Math.min(i + chunkSize, batch.size());
+                total += fillStateMapper.upsertBatch(batch.subList(i, j));
+            }
+
+            cur = cur.plusMonths(1);
+        }
+        return total;
+    }
+
+    private static Long tenantOrDefault() {
+        Long tid = SessionHelper.getTenantId();
+        return tid != null ? tid : 1L;
+    }
+
+    /**
+     * 统览范围：优先 officeId，其次 deptId；都为空则取当前登录用户主组织（本部门）。
+     */
+    private static Long resolveScopeOrgId(Long deptId, Long officeId) {
+        if (officeId != null) return officeId;
+        if (deptId != null) return deptId;
+        return SessionHelper.getMainOrgId();
+    }
+}
+

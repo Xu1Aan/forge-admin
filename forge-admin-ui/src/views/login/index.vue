@@ -483,10 +483,6 @@ function handleWeaverLogin() {
     $message.warning('泛微SSO未启用')
     return
   }
-  const width = 600
-  const height = 600
-  const left = (window.innerWidth - width) / 2
-  const top = (window.innerHeight - height) / 2
 
   // redirect_uri 需在后端配置为前端回调页：/#/login/weaver-callback
   const authUrl = buildAuthorizeUrl('/sso/weaver/authorize', {
@@ -494,11 +490,8 @@ function handleWeaverLogin() {
     userClient: 'pc',
   })
 
-  window.open(
-    authUrl,
-    'weaver_sso_auth',
-    `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,resizable=yes`,
-  )
+  // 泛微登录应为整页跳转（避免浏览器拦截弹窗，也更符合 SSO 体验）
+  window.location.href = authUrl
 }
 
 // 根据验证码类型加载验证码

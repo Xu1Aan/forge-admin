@@ -5,6 +5,7 @@ import com.mdframe.forge.plugin.deptdaily.attendance.dto.AttendanceDayDTO;
 import com.mdframe.forge.plugin.deptdaily.attendance.dto.AttendanceToggleDayRequest;
 import com.mdframe.forge.plugin.deptdaily.attendance.dto.AttendanceUpdateDayRequest;
 import com.mdframe.forge.plugin.deptdaily.attendance.service.DeptAttendanceService;
+import com.mdframe.forge.plugin.deptdaily.attendance.service.DeptCalendarService;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
 import com.mdframe.forge.starter.core.domain.RespInfo;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 public class DeptAttendanceController {
 
     private final DeptAttendanceService attendanceService;
+    private final DeptCalendarService calendarService;
 
     /**
      * 一键填报整月：创建月度填报单（DRAFT）
@@ -26,6 +28,15 @@ public class DeptAttendanceController {
     @PostMapping("/sheet/one-click-fill")
     public RespInfo<Long> oneClickFill(@RequestParam int year, @RequestParam int month) {
         return RespInfo.success(attendanceService.oneClickFill(year, month).getId());
+    }
+
+    /**
+     * 从 jiejiari 全量重拉并覆盖该年 {@code dept_calendar_day}，用于官版节假日调整后拿到最新数据。
+     */
+    @PostMapping("/calendar/refresh")
+    public RespInfo<Void> refreshCalendar(@RequestParam int year) {
+        calendarService.refreshYear(year);
+        return RespInfo.success();
     }
 
     /**
