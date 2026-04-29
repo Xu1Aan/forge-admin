@@ -19,7 +19,8 @@ services:
     restart: unless-stopped
     command: redis-server --requirepass ${REDIS_PASSWORD:-forge123456} --appendonly yes
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      # 宿主机默认 6381 → 容器 6379（应用走服务名 redis:6379，不受此处影响）
+      - "${REDIS_PORT:-6381}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -45,11 +46,11 @@ services:
       redis:
         condition: service_healthy
     environment:
-      MYSQL_HOST: ${MYSQL_HOST:-host.docker.internal}
+      MYSQL_HOST: ${MYSQL_HOST:-10.20.124.71}
       MYSQL_PORT: ${MYSQL_PORT:-3306}
-      MYSQL_DB: ${MYSQL_DB:-forge_admin}
+      MYSQL_DB: ${MYSQL_DB:-swhi_ims_db}
       MYSQL_USER: ${MYSQL_USER:-root}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-forge123456}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-swroot!#30}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-forge123456}
@@ -83,7 +84,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-swroot!#30}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      # REDIS_PASSWORD: ${REDIS_PASSWORD:-forge123456}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-forge123456}
       FLOW_CLIENT_URL: http://forge-flow:8081
       JAVA_OPTS: -Xms256m -Xmx512m
     ports:
