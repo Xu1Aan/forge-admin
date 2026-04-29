@@ -13,11 +13,12 @@ COPY --from=builder /build/forge-flow/target/forge-flow.jar app.jar
 
 ENV JAVA_OPTS="-Xms256m -Xmx512m"
 ENV SPRING_PROFILES_ACTIVE=prod
-ENV MYSQL_HOST=host.docker.internal
+# 默认值与 docker/docker-compose.yml 中 forge-flow.environment 对齐（compose/.env 会覆盖）
+ENV MYSQL_HOST=10.20.124.71
 ENV MYSQL_PORT=3306
-ENV MYSQL_DB=forge_admin
+ENV MYSQL_DB=swhi_ims_db
 ENV MYSQL_USER=root
-ENV MYSQL_PASSWORD=forge123456
+ENV MYSQL_PASSWORD="swroot!#30"
 ENV REDIS_HOST=redis
 ENV REDIS_PORT=6379
 ENV REDIS_PASSWORD=forge123456

@@ -11,8 +11,9 @@
 forge-admin-ui/node_modules/
 forge-admin-ui/dist/
 
-# Docker 目录自身不需要进入构建上下文
-docker/
+# Docker 目录：排除除 nginx.conf 外文件（整块 docker/ 无法被 ! 反选子文件）
+docker/*
+!docker/nginx.conf
 
 # 其他非必要目录
 .opencode/
