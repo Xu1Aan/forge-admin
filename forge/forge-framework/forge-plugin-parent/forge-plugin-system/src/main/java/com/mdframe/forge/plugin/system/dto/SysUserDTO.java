@@ -120,6 +120,11 @@ public class SysUserDTO implements Serializable {
     private String avatar;
 
     /**
+     * 行政区划编码
+     */
+    private String regionCode;
+
+    /**
      * 备注
      */
     private String remark;

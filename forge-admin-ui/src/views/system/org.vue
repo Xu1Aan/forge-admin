@@ -51,6 +51,8 @@ const crudRef = ref(null)
 const expandAll = ref(true)
 const expandedKeys = ref([])
 const parentOrgOptions = ref([{ label: '顶级组织', value: 0, key: 0 }])
+const searchRegionOptions = ref([])
+const editRegionOptions = ref([])
 
 // 组织类型选项
 const orgTypeOptions = [
@@ -74,6 +76,17 @@ const searchSchema = [
     props: {
       placeholder: '请输入组织名称',
     },
+  },
+  {
+    field: 'regionCode',
+    label: '行政区划',
+    type: 'treeSelect',
+    props: {
+      placeholder: '请选择行政区划',
+      clearable: true,
+      filterable: true,
+    },
+    options: () => searchRegionOptions.value,
   },
   {
     field: 'orgType',
@@ -130,6 +143,16 @@ const tableColumns = computed(() => [
     prop: 'address',
     label: '地址',
     width: 200,
+  },
+  {
+    prop: 'regionCode',
+    label: '行政区划',
+    width: 150,
+    render: (row) => {
+      if (!row.regionCode) return '-'
+      const name = findRegionName(searchRegionOptions.value, row.regionCode)
+      return name || row.regionCode
+    },
   },
   {
     prop: 'sort',
@@ -254,6 +277,17 @@ const editSchema = ref([
       placeholder: '请输入组织地址',
     },
   },
+  {
+    field: 'regionCode',
+    label: '行政区划',
+    type: 'treeSelect',
+    props: {
+      placeholder: '请选择行政区划',
+      clearable: true,
+      filterable: true,
+    },
+    options: () => editRegionOptions.value,
+  },
 
   // 状态配置
   {
@@ -309,11 +343,62 @@ async function loadParentOrgOptions() {
         { label: '顶级组织', value: 0, key: 0 },
         ...convertToTreeSelect(res.data || []),
       ]
+      
+      // 同时加载行政区划选项
+      await loadRegionOptions()
     }
   }
   catch (error) {
     console.error('加载上级组织选项失败:', error)
   }
+}
+
+// 加载行政区划选项（一次性加载内蒙完整区划树，含虚拟组织）
+async function loadRegionOptions() {
+  try {
+    const res = await request.get('/system/region/treeAll', { params: { rootCode: '150000', dataRight: true } })
+    if (res.code === 200) {
+      const data = res.data || []
+      // 搜索场景：虚拟节点可选（代表"该区域下所有"）
+      searchRegionOptions.value = convertRegionToTreeSelect(data, false)
+      // 编辑场景：虚拟节点不可选（避免存入ALL后缀编码）
+      editRegionOptions.value = convertRegionToTreeSelect(data, true)
+    }
+  }
+  catch (error) {
+    console.error('加载行政区划选项失败:', error)
+  }
+}
+
+// 将后端返回的树形数据转换为TreeSelect组件需要的格式
+// virtualDisabled: true=编辑表单（虚拟节点不可选），false=搜索筛选（虚拟节点可选）
+function convertRegionToTreeSelect(list, virtualDisabled = true) {
+  return list.map(item => {
+    const node = {
+      label: item.name,
+      value: item.code,
+      key: item.code,
+    }
+    if (virtualDisabled && item.code && item.code.endsWith('ALL')) {
+      node.disabled = true
+    }
+    if (item.children && item.children.length > 0) {
+      node.children = convertRegionToTreeSelect(item.children, virtualDisabled)
+    }
+    return node
+  })
+}
+
+// 在区划树中根据code查找名称
+function findRegionName(options, code) {
+  for (const item of options) {
+    if (item.value === code) return item.label
+    if (item.children) {
+      const name = findRegionName(item.children, code)
+      if (name) return name
+    }
+  }
+  return null
 }
 
 // 获取所有节点的 key
