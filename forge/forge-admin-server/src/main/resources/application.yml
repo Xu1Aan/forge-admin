@@ -21,6 +21,13 @@ server:
       # 阻塞任务线程池, 当执行类似servlet请求阻塞操作, undertow会从这个线程池中取得线程,它的值设置取决于系统的负载
       worker: 256
 
+# Actuator（K8s：/actuator/health/liveness、/actuator/health/readiness）
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
 # 日志配置
 logging:
   level:
