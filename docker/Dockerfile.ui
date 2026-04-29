@@ -5,7 +5,8 @@
 FROM node:18-alpine AS builder
 WORKDIR /app
 COPY forge-admin-ui/package.json forge-admin-ui/pnpm-lock.yaml ./
-RUN npm install -g pnpm@8 && pnpm install --frozen-lockfile
+# lockfile 为 9.x，需与本地一致使用 pnpm 9+（pnpm@8 会报 LOCKFILE_BREAKING_CHANGE）
+RUN npm install -g pnpm@9 && pnpm install --frozen-lockfile
 COPY forge-admin-ui/ .
 RUN pnpm build
 
