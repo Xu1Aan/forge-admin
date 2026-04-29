@@ -42,6 +42,12 @@ public class ReplayAttackFilter implements Filter {
             return;
         }
 
+        // Actuator / K8s 探针无防重放头，必须与 Sa-Token 等对 /actuator/** 放行一致
+        if (path.startsWith("/actuator/")) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         // 与 EncryptResponse/Decrypt 一致：主开关关闭时不走防重放（开发环境常设 forge.crypto.enabled: false）
         if (!Boolean.TRUE.equals(properties.getEnabled())) {
             chain.doFilter(request, response);

@@ -40,7 +40,7 @@ logging:
 # Spring配置
 spring:
   application:
-    name: ${project.name}
+    name: swhi-ims-admin
   # 资源信息
   messages:
     # 国际化资源文件路径

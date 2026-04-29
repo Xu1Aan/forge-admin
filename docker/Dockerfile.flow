@@ -2,7 +2,7 @@
 # Forge Flow 流程服务 Dockerfile
 # ============================================
 # 构建上下文为项目根目录，docker compose 中 context 设为 ..
-FROM eclipse-temurin:17-jdk AS builder
+FROM maven:3-eclipse-temurin-17 AS builder
 WORKDIR /build
 COPY forge/ .
 RUN mvn clean package -pl forge-flow -am -DskipTests -Pprod
