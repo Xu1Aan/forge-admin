@@ -1,0 +1,5 @@
+# 白名单：仅把 Dockerfile 与流水线拷入的 jar 作为构建上下文，避免误把其它目录打进镜像（例如 200MB+）
+*
+!Dockerfile
+!.dockerignore
+!*.jar

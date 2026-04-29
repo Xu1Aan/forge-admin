@@ -13,7 +13,7 @@ COPY --from=builder /build/forge-admin/target/forge-admin.jar app.jar
 
 ENV JAVA_OPTS="-Xms256m -Xmx512m"
 ENV SPRING_PROFILES_ACTIVE=prod
-ENV MYSQL_HOST=mysql
+ENV MYSQL_HOST=host.docker.internal
 ENV MYSQL_PORT=3306
 ENV MYSQL_DB=forge_admin
 ENV MYSQL_USER=root

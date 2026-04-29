@@ -93,3 +93,5 @@ yarn.lock
 .env
 *.secrets
 *docs-dist
+/forge/.git
+/forge/.gitignore

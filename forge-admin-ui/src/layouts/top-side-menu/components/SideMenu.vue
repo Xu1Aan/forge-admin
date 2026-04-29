@@ -109,6 +109,11 @@ function handleMenuSelect(key) {
   background: transparent;
 }
 
+.side-menu {
+  /* 顶部+侧边菜单布局：统一选中色 */
+  --top-side-menu-accent: #4B32FE;
+}
+
 .side-menu .n-menu-item-content {
   position: relative;
   margin: 1px 6px;
@@ -123,20 +128,24 @@ function handleMenuSelect(key) {
   padding: 0 12px !important;
 }
 
+.side-menu .n-menu-item-content__label {
+  line-height: 1.4;
+}
+
 .side-menu .n-menu-item-content:hover {
-  color: var(--primary-500);
+  color: var(--top-side-menu-accent);
   background: var(--primary-50);
 }
 
 .side-menu .n-menu-item-content--selected {
   background: var(--primary-50) !important;
-  color: var(--primary-500) !important;
+  color: var(--top-side-menu-accent) !important;
   font-weight: 500;
 }
 
 .side-menu .n-menu-item-content--selected:hover {
   background: var(--primary-50) !important;
-  color: var(--primary-500) !important;
+  color: var(--top-side-menu-accent) !important;
 }
 
 .side-menu .n-menu-item-content--selected::after {
@@ -146,8 +155,80 @@ function handleMenuSelect(key) {
   top: 20%;
   height: 60%;
   width: 3px;
-  background: var(--primary-500);
+  background: var(--top-side-menu-accent);
   border-radius: 0 2px 2px 0;
+}
+
+/* ===== 层级区分：二级(目录/子菜单标题) vs 三级(子项) ===== */
+/* 二级菜单（Submenu 标题）：更像“分组标题” */
+.side-menu .n-submenu > .n-menu-item-content {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.side-menu .n-submenu > .n-menu-item-content:hover {
+  background: var(--primary-50);
+  color: var(--top-side-menu-accent);
+}
+
+/* 二级展开时，标题有更明确的“正在浏览此分组”提示 */
+.side-menu .n-submenu.n-submenu--expanded > .n-menu-item-content,
+.side-menu .n-submenu.n-submenu--active > .n-menu-item-content {
+  background: var(--primary-50); /* fallback */
+  background: color-mix(in srgb, var(--primary-50) 60%, transparent);
+}
+
+/* 三级菜单（Submenu children）：更轻、更缩进，并提供“层级引导线” */
+.side-menu .n-submenu-children {
+  position: relative;
+  margin: 2px 6px 6px;
+  padding: 2px 0 2px 10px;
+}
+
+.side-menu .n-submenu-children::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--border-light);
+  border-radius: 1px;
+}
+
+.side-menu .n-submenu-children .n-menu-item-content {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  padding-left: 28px !important; /* 给圆点+引导线留空间 */
+}
+
+/* 三级项圆点：避免“看起来像同一层级” */
+.side-menu .n-submenu-children .n-menu-item-content::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  transform: translateY(-50%);
+  background: var(--border-default);
+}
+
+.side-menu .n-submenu-children .n-menu-item-content:hover::before {
+  background: var(--top-side-menu-accent);
+}
+
+.side-menu .n-submenu-children .n-menu-item-content--selected::before {
+  background: var(--top-side-menu-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-50) 75%, transparent);
+}
+
+.side-menu .n-submenu-children .n-menu-item-content--selected::after {
+  /* 子项沿用左侧指示条，但更“细”，避免和二级标题抢层级 */
+  width: 2px;
+  top: 22%;
+  height: 56%;
 }
 
 .side-menu .n-menu-item-content__icon {
@@ -158,12 +239,12 @@ function handleMenuSelect(key) {
 }
 
 .side-menu .n-menu-item-content:hover .n-menu-item-content__icon {
-  color: var(--primary-500);
+  color: var(--top-side-menu-accent);
   opacity: 1;
 }
 
 .side-menu .n-menu-item-content--selected .n-menu-item-content__icon {
-  color: var(--primary-500) !important;
+  color: var(--top-side-menu-accent) !important;
   opacity: 1;
 }
 

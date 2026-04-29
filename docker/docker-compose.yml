@@ -1,43 +1,15 @@
 # ============================================
 # Forge Admin 一键部署 Docker Compose 编排
 # ============================================
+# MySQL：不在此编排中部署，请在 .env 中配置 MYSQL_HOST 等指向已有数据库（本机可为 host.docker.internal）。
 # 使用方式：
 #   cd docker
-#   cp .env.example .env   # 修改配置
+#   cp .env.example .env   # 修改配置（含外部 MySQL 地址与账号）
 #   docker compose up -d
 #   访问 http://localhost/forge  默认账号: admin/123456
 # ============================================
 
 services:
-  # ========================
-  # MySQL 数据库
-  # ========================
-  mysql:
-    image: mysql:8.0
-    container_name: forge-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-forge123456}
-      MYSQL_DATABASE: ${MYSQL_DB:-forge_admin}
-      MYSQL_CHARSET: utf8mb4
-      TZ: Asia/Shanghai
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ../forge/forge-admin/sql:/初始化脚本.sql
-    command: >
-      --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
-      --default-authentication-plugin=mysql_native_password
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_PASSWORD:-forge123456}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks:
-      - forge-network
-
   # ========================
   # Redis 缓存
   # ========================
@@ -67,16 +39,16 @@ services:
       dockerfile: docker/Dockerfile.flow
     container_name: forge-flow
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
+      MYSQL_HOST: ${MYSQL_HOST:-host.docker.internal}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
       MYSQL_DB: ${MYSQL_DB:-forge_admin}
-      MYSQL_USER: root
+      MYSQL_USER: ${MYSQL_USER:-root}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-forge123456}
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -96,22 +68,22 @@ services:
       dockerfile: docker/Dockerfile.admin
     container_name: forge-admin
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_healthy
       forge-flow:
         condition: service_started
     environment:
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_DB: ${MYSQL_DB:-forge_admin}
-      MYSQL_USER: root
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-forge123456}
+      MYSQL_HOST: ${MYSQL_HOST:-10.20.124.71}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_DB: ${MYSQL_DB:-swhi_ims_db}
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-swroot!#30}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-forge123456}
+      # REDIS_PASSWORD: ${REDIS_PASSWORD:-forge123456}
       FLOW_CLIENT_URL: http://forge-flow:8081
       JAVA_OPTS: -Xms256m -Xmx512m
     ports:
@@ -140,8 +112,6 @@ services:
 # 数据卷
 # ========================
 volumes:
-  mysql_data:
-    driver: local
   redis_data:
     driver: local
 

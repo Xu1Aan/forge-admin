@@ -8,18 +8,14 @@
     <version>1.0.0</version>
   </parent>
   <groupId>com.mdframe.forge</groupId>
-  <artifactId>forge-plugin-message</artifactId>
+  <artifactId>forge-plugin-dept-daily</artifactId>
   <version>1.0.0</version>
-  <name>forge-plugin-message</name>
-  <description>forge-plugin-message</description>
+  <name>forge-plugin-dept-daily</name>
+  <description>Department daily management plugin</description>
   <dependencies>
     <dependency>
       <groupId>com.mdframe.forge</groupId>
-      <artifactId>forge-starter-message</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-tx</artifactId>
+      <artifactId>forge-starter-core</artifactId>
     </dependency>
     <dependency>
       <groupId>com.mdframe.forge</groupId>
@@ -30,12 +26,16 @@
       <artifactId>forge-starter-auth</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.mdframe.forge</groupId>
-      <artifactId>forge-plugin-system</artifactId>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
     <dependency>
       <groupId>com.mdframe.forge</groupId>
-      <artifactId>forge-starter-tenant</artifactId>
+      <artifactId>forge-starter-excel</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
     </dependency>
   </dependencies>
 </project>

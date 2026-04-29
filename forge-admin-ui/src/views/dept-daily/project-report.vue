@@ -29,6 +29,20 @@
           <n-button secondary :loading="loading" @click="reload">
             刷新
           </n-button>
+          <n-popconfirm
+            :show-icon="false"
+            :disabled="!canSubmit"
+            positive-text="确认提交"
+            negative-text="取消"
+            @positive-click="submitAll"
+          >
+            <template #trigger>
+              <n-button type="primary" :loading="submitting" :disabled="!canSubmit">
+                提交
+              </n-button>
+            </template>
+            将提交当月已填写的项目月报，提交后可能无法继续修改，是否继续？
+          </n-popconfirm>
         </n-space>
       </template>
 
@@ -68,6 +82,8 @@
                 <div class="row-hd__main">
                   <div class="row-hd__title">{{ p.projectName }}</div>
                   <div class="row-hd__meta">
+                    <span>项目类型：{{ projectCategoryLabel(p.projectCategory) }}</span>
+                    <span class="sep">·</span>
                     <span v-if="p.planEndDate">预计截止：{{ p.planEndDate }}</span>
                     <span v-else>预计截止：—</span>
                     <span class="sep">·</span>
@@ -126,9 +142,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { listFillableProjects } from '@/api/dept-daily/project'
 import { pageProjectMonth, upsertProjectMonth } from '@/api/dept-daily/report'
 import { useUserStore } from '@/store'
+import { projectCategoryLabel } from '@/constants/dept-daily-project-category'
 
 const userStore = useUserStore()
 const loading = ref(false)
+const submitting = ref(false)
 
 const now = new Date()
 const year = ref(now.getFullYear())
@@ -163,6 +181,7 @@ const defaultExpanded = computed(() => {
 
 const filledCount = computed(() => projects.value.filter(p => (form[p.id] || '').trim().length > 0).length)
 const dirtyCount = computed(() => projects.value.filter(p => dirty[p.id]).length)
+const canSubmit = computed(() => !loading.value && !submitting.value && filledCount.value > 0)
 
 function getSaveText(projectId) {
   if (savingMap[projectId]) return '保存中…'
@@ -262,7 +281,39 @@ async function flushDraft(projectId) {
     await saveDraftNow(projectId)
 }
 
-// 已按需求移除“提交”能力：保留自动保存与手动“立即保存”
+async function submitAll() {
+  if (!canSubmit.value) return
+  submitting.value = true
+  try {
+    await Promise.all(projects.value.map(p => flushDraft(p.id)))
+
+    const submitTargets = projects.value
+      .map(p => ({ projectId: p.id, text: (form[p.id] || '').trim() }))
+      .filter(it => it.text.length > 0)
+
+    if (submitTargets.length === 0) {
+      window.$message?.warning('没有可提交的内容')
+      return
+    }
+
+    await Promise.all(submitTargets.map(it => upsertProjectMonth({
+      reportYm: reportYm.value,
+      projectId: it.projectId,
+      summaryText: it.text,
+      submit: true,
+    })))
+
+    window.$message?.success(`已提交 ${submitTargets.length} 条项目月报`)
+    await load()
+  }
+  catch (e) {
+    console.error(e)
+    window.$message?.error(e?.response?.data?.message || e?.message || '提交失败')
+  }
+  finally {
+    submitting.value = false
+  }
+}
 
 onMounted(() => {
   load()

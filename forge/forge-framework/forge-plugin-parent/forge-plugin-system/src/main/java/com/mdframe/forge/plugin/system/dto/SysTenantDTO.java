@@ -1,5 +1,7 @@
 package com.mdframe.forge.plugin.system.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -9,6 +11,7 @@ import java.time.LocalDateTime;
  * 租户新增/修改DTO
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class SysTenantDTO implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -46,6 +49,7 @@ public class SysTenantDTO implements Serializable {
     /**
      * 过期时间
      */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime expireTime;
 
     /**
