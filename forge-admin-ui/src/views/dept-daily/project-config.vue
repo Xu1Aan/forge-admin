@@ -1,9 +1,24 @@
 <template>
   <div class="dept-daily-page project-config-shell">
-    <n-card v-if="!showForm" title="项目与人员配置" class="project-config-list" :bordered="false">
-      <div class="toolbar">
-        <n-space justify="space-between" align="center" wrap>
-          <n-space align="center" wrap>
+    <div v-if="!showForm" class="project-list-panel">
+      <div class="project-list-header">
+        <div class="header-title">
+          <i class="i-material-symbols:account-tree-rounded" />
+          <span>项目与人员配置</span>
+        </div>
+        <n-space :size="12" wrap justify="end">
+          <n-button v-if="canImportExcel" secondary size="small" @click="openImport">
+            Excel导入
+          </n-button>
+          <n-button type="primary" size="small" @click="openCreate">
+            新项目立项
+          </n-button>
+        </n-space>
+      </div>
+
+      <div class="project-list-toolbar">
+        <n-space justify="space-between" align="center" wrap :size="[12, 10]">
+          <n-space align="center" wrap :size="[12, 10]">
             <n-select
               v-model:value="queryYear"
               style="width: 140px"
@@ -29,25 +44,26 @@
               @keyup.enter="reload"
               @clear="reload"
             />
-            <n-button secondary :loading="loading" @click="reload">
-              刷新
+            <n-button secondary size="small" :loading="loading" @click="reload">
+              <template #icon>
+                <i class="i-material-symbols:search-rounded" />
+              </template>
+              搜索
             </n-button>
           </n-space>
 
-          <n-space :size="12">
-            <n-space :size="12">
-              <n-button v-if="canImportExcel" secondary @click="openImport">
-                Excel导入
-              </n-button>
-              <n-button type="primary" @click="openCreate">
-                新项目立项
-              </n-button>
-            </n-space>
+          <n-space :size="12" wrap justify="end">
+            <n-button quaternary size="small" :disabled="loading" @click="reload">
+              <template #icon>
+                <i class="i-material-symbols:refresh-rounded" />
+              </template>
+              刷新
+            </n-button>
           </n-space>
         </n-space>
       </div>
 
-      <div class="project-list-table-area">
+      <div class="project-list-content">
         <n-data-table
           :columns="columns"
           :data="rows"
@@ -60,7 +76,7 @@
           @update:page-size="onPageSize"
         />
       </div>
-    </n-card>
+    </div>
 
     <ProjectConfigFormPanel
       v-else
@@ -311,6 +327,7 @@ async function load() {
       projectCategory: queryCategory.value || undefined,
     })
     const page = res.data
+    // 后端已按：待审批优先 + updateTime 倒序（兜底 id 倒序）排序，这里保持服务端顺序
     rows.value = page?.records || []
     pagination.itemCount = page?.total || 0
   }
@@ -589,38 +606,56 @@ onMounted(() => {
   padding: 12px clamp(12px, 2vw, 28px) 16px;
 }
 
-.toolbar {
-  flex-shrink: 0;
-  margin-bottom: 12px;
-}
-
 /* —— 列表页 —— */
-.project-config-list {
+.project-list-panel {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100dvh - 88px);
-  width: 100%;
-}
-
-.project-config-list :deep(.n-card-header) {
-  flex-shrink: 0;
-}
-
-.project-config-list :deep(.n-card__content),
-.project-config-list :deep(.n-card-content) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  min-width: 0;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.project-list-table-area {
+.project-list-header {
+  padding: 16px 16px 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.header-title i {
+  font-size: 20px;
+  color: #4f46e5;
+}
+
+.project-list-toolbar {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+  background: rgba(249, 250, 251, 0.6);
+}
+
+.project-list-content {
   flex: 1;
   min-height: 0;
   width: 100%;
   overflow: auto;
+  padding: 0 12px 12px;
 }
 
 /* ProjectConfigFormPanel 自带表单布局样式 */

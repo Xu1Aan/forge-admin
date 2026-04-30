@@ -16,6 +16,7 @@ public class ProjectListRowVO {
     private LocalDate startDate;
     private LocalDate planEndDate;
     private String status;
+    private LocalDateTime updateTime;
     private LocalDateTime doneAt;
     private Long doneByUserId;
 }

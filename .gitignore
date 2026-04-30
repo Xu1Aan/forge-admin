@@ -95,3 +95,9 @@ yarn.lock
 *docs-dist
 /forge/.git
 /forge/.gitignore
+
+/data
+
+application-prod.yml
+
+/k3s-pro
