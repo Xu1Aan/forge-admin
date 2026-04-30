@@ -859,9 +859,12 @@ onMounted(() => {
   // 监听三方登录消息
   window.addEventListener('message', handleSocialLoginMessage)
 
-  // 兼容泛微 wui service 回跳：/login?ticket=ST-xxx&redirect=/home
-  if (route.query?.ticket) {
-    handleWeaverTicketLogin()
+  // 兼容泛微回跳两种形式：
+  // 1) /#/login?ticket=xxx
+  // 2) /?ticket=xxx#/login?redirect=/home
+  const callbackQuery = resolveWeaverCallbackQuery()
+  if (callbackQuery.ticket || callbackQuery.code) {
+    handleWeaverTicketLogin(callbackQuery)
   }
 })
 
@@ -874,17 +877,45 @@ onUnmounted(() => {
   window.removeEventListener('message', handleSocialLoginMessage)
 })
 
-async function handleWeaverTicketLogin() {
+function resolveWeaverCallbackQuery() {
+  const hashQuery = { ...route.query }
+  const searchQuery = Object.fromEntries(new URLSearchParams(window.location.search).entries())
+  const merged = {
+    ...searchQuery,
+    ...hashQuery,
+  }
+  // 票据以 search 为准（当前实际回跳为 /?ticket=...#/login）
+  if (searchQuery.ticket)
+    merged.ticket = searchQuery.ticket
+  if (searchQuery.code)
+    merged.code = searchQuery.code
+  return merged
+}
+
+function resolveAppTargetPath(rawPath) {
+  if (!rawPath || rawPath === '/login')
+    return import.meta.env.VITE_HOME_PATH || '/'
+  return String(rawPath).startsWith('/') ? String(rawPath) : `/${String(rawPath)}`
+}
+
+function buildAppUrl(path) {
+  return router.resolve({ path }).href
+}
+
+async function handleWeaverTicketLogin(callbackQuery = null) {
   if (!weaverSsoEnabled.value)
     return
   try {
     loading.value = true
     $message.loading('正在使用泛微票据登录...', { key: 'login' })
 
-    const { ticket, redirect } = route.query
+    const query = callbackQuery || resolveWeaverCallbackQuery()
+    const ticket = query.ticket || query.code
+    const redirect = query.redirect
     const res = await api.weaverCallback({
       ticket,
-      tenantId: route.query.tenantId,
+      state: query.state,
+      tenantId: query.tenantId || route.query.tenantId,
       userClient: 'pc',
     })
 
@@ -895,9 +926,9 @@ async function handleWeaverTicketLogin() {
 
     await onLoginSuccess(res.data)
 
-    // 优先跳转回 redirect
-    const target = redirect && redirect !== '/login' ? String(redirect) : (import.meta.env.VITE_HOME_PATH || '/')
-    window.location.href = target
+    // 优先跳转回 redirect，并保持当前应用 base/hash 规则
+    const targetPath = resolveAppTargetPath(redirect)
+    window.location.href = buildAppUrl(targetPath)
   }
   catch (e) {
     console.error(e)

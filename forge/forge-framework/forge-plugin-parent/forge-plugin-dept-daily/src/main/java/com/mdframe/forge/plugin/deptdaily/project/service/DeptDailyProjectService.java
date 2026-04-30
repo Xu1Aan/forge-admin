@@ -154,7 +154,8 @@ public class DeptDailyProjectService {
         p.setLeaderUserId(req.getLeaderUserId());
         p.setStartDate(start);
         p.setPlanEndDate(req.getPlanEndDate());
-        p.setStatus("ACTIVE");
+        // 新项目立项后先进入“待审批”状态（DRAFT），审批通过后才允许进入后续流程（如月报填报）
+        p.setStatus("DRAFT");
         p.setRemark(StringUtils.trimToNull(req.getRemark()));
         projectMapper.insert(p);
 
@@ -173,6 +174,10 @@ public class DeptDailyProjectService {
                 .eq(DeptDailyProject::getId, req.getId())
                 .last("limit 1"));
         if (existing == null) throw new IllegalArgumentException("项目不存在");
+
+        // 权限：仅项目负责人可编辑项目
+        boolean can = uid.equals(existing.getLeaderUserId());
+        if (!can) throw new IllegalStateException("无权限编辑项目");
 
         if (StringUtils.isNotBlank(req.getProjectName())) existing.setProjectName(StringUtils.trim(req.getProjectName()));
         if (req.getProjectCategory() != null) {
@@ -214,16 +219,28 @@ public class DeptDailyProjectService {
                 .last("limit 1"));
         if (p == null) throw new IllegalArgumentException("项目不存在");
 
-        // 权限：负责人 / 超管 / 租户管理员 / 有权限标识
-        boolean can = uid.equals(p.getLeaderUserId())
-                || SessionHelper.isAdmin()
-                || SessionHelper.isTenantAdmin()
-                || SessionHelper.hasPermission("dept-daily:project:finish");
-        if (!can) throw new IllegalStateException("无权限操作");
-
         String from = p.getStatus();
         String to = req.getDone() ? "DONE" : "ACTIVE";
         if (StringUtils.equals(from, to)) return;
+
+        // 权限说明：
+        // - 从“待审批(DRAFT)”进入“进行中(ACTIVE)”= 审批通过：要求 dept:project:aprrove（拼写按约定）
+        // - 其余状态流转：沿用 dept-daily:project:finish
+        boolean can;
+        if ("DRAFT".equals(from) && "ACTIVE".equals(to)) {
+            // 仅审批权限人员可从“待审批(DRAFT)”流转到“进行中(ACTIVE)”
+            // 项目负责人不再具备该流转的例外权限
+            can = SessionHelper.isAdmin()
+                    || SessionHelper.isTenantAdmin()
+                    || SessionHelper.hasPermission("dept:project:aprrove");
+        }
+        else {
+            can = uid.equals(p.getLeaderUserId())
+                    || SessionHelper.isAdmin()
+                    || SessionHelper.isTenantAdmin()
+                    || SessionHelper.hasPermission("dept-daily:project:finish");
+        }
+        if (!can) throw new IllegalStateException("无权限操作");
 
         p.setStatus(to);
         if ("DONE".equals(to)) {
@@ -263,11 +280,8 @@ public class DeptDailyProjectService {
                 .last("limit 1"));
         if (p == null) throw new IllegalArgumentException("项目不存在");
 
-        // 权限：负责人 / 超管 / 租户管理员 / 有权限标识
-        boolean can = uid.equals(p.getLeaderUserId())
-                || SessionHelper.isAdmin()
-                || SessionHelper.isTenantAdmin()
-                || SessionHelper.hasPermission("dept-daily:project:delete");
+        // 权限：仅项目负责人可删除
+        boolean can = uid.equals(p.getLeaderUserId());
         if (!can) throw new IllegalStateException("无权限操作");
 
         // 若已有任何月报数据，禁止删除
@@ -326,7 +340,8 @@ public class DeptDailyProjectService {
 
         LambdaQueryWrapper<DeptDailyProject> w = new LambdaQueryWrapper<DeptDailyProject>()
                 .eq(DeptDailyProject::getTenantId, tenantId)
-                .notIn(DeptDailyProject::getStatus, List.of("DONE", "CLOSED"))
+                // 待审批(DRAFT)不可进入后续流程，需审批通过后才允许填报月报/下一步
+                .eq(DeptDailyProject::getStatus, "ACTIVE")
                 .ge(DeptDailyProject::getPlanEndDate, today)
                 .and(q -> q.eq(DeptDailyProject::getLeaderUserId, uid)
                         .or()
@@ -365,6 +380,12 @@ public class DeptDailyProjectService {
 
         Long tenantId = tenantOrDefault();
         Long uid = requireUserId();
+
+        // 权限：仅具备审批权限的人可进行 Excel 导入
+        boolean can = SessionHelper.isAdmin()
+                || SessionHelper.isTenantAdmin()
+                || SessionHelper.hasPermission("dept:project:aprrove");
+        if (!can) throw new IllegalStateException("无权限导入项目");
 
         int total = 0, ok = 0, bad = 0;
 
@@ -411,7 +432,7 @@ public class DeptDailyProjectService {
                         existing.setProjectCategory(category);
                         existing.setLeaderUserId(leaderUserId);
                         if (StringUtils.isBlank(existing.getStatus())) {
-                            existing.setStatus("ACTIVE");
+                            existing.setStatus("DRAFT");
                         }
                         projectMapper.updateById(existing);
                         upsertMembersInternal(tenantId, uid, existing.getId(), leaderUserId, new ArrayList<>(memberUserIds));
@@ -426,7 +447,7 @@ public class DeptDailyProjectService {
                         p.setLeaderUserId(leaderUserId);
                         p.setStartDate(defaultStartDate);
                         p.setPlanEndDate(defaultPlanEndDate);
-                        p.setStatus("ACTIVE");
+                        p.setStatus("DRAFT");
                         projectMapper.insert(p);
 
                         upsertMembersInternal(tenantId, uid, p.getId(), leaderUserId, new ArrayList<>(memberUserIds));

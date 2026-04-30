@@ -67,7 +67,7 @@
 
       <n-spin :show="loading">
         <div v-if="projects.length === 0" class="empty">
-          <n-empty description="暂无可填报项目月报（仅负责人可填）" />
+          <n-empty description="暂无可填报项目月报（需先完成项目状态审批，且仅负责人可填）" />
         </div>
 
         <n-collapse v-else class="report-collapse" :default-expanded-names="defaultExpanded">
@@ -103,7 +103,8 @@
 
             <div class="panel">
               <n-input
-                :value="form[p.id]"
+                :key="`${p.id}-${formVersion}`"
+                :default-value="form[p.id]"
                 type="textarea"
                 :autosize="false"
                 :rows="6"
@@ -170,6 +171,8 @@ const lastSaved = reactive({})
 const dirty = reactive({})
 const savingMap = reactive({})
 const timers = new Map()
+// 仅在重新加载数据时强制重挂载输入框，避免自动保存导致的重渲染重置光标
+const formVersion = ref(0)
 
 const defaultExpanded = computed(() => {
   const ids = projects.value.slice(0, 3).map(p => p.id)
@@ -217,6 +220,7 @@ async function load() {
       dirty[it.projectId] = false
       savingMap[it.projectId] = false
     }
+    formVersion.value++
   }
   catch (e) {
     console.error(e)

@@ -80,11 +80,13 @@ forge:
       enabled: true
       base-url: "http://10.20.123.5"
       # 完整登录入口（配置后后端将直接跳转，不再拼接 appid/service/_key）
-      login-url: "http://10.20.123.5/wui/index.html#/?appid=oneApp&service=http://10.20.149.205:3000"
+      login-url: "http://10.20.123.5/wui/index.html#/?appid=oneApp&service=http://10.20.124.10/web/ims/"
       client-id: "xa"
       client-secret: "xa"
-      redirect-uri: "http://10.20.149.205:3000/login/weaver-callback"
-      service-url: "http://10.20.149.205:3000/"
+      # redirect_uri 作为 query 参数传递时不能包含未编码的 '#'
+      # 统一回跳到前端根地址，由前端登录页解析 ticket 并完成登录
+      redirect-uri: "http://10.20.124.10/web/ims/"
+      service-url: "http://10.20.124.10/web/ims/"
       wui-key: "704693"
       state-ttl-seconds: 300
 

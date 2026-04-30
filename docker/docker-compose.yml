@@ -119,6 +119,13 @@ volumes:
 # ========================
 # 网络
 # ========================
+# 显式指定子网：避免 Docker 默认地址池耗尽时出现
+# 「could not find an available, non-overlapping IPv4 address pool」；
+# 若与宿主机 VPN/其它 compose 冲突，请改subnet或先 docker network prune
 networks:
   forge-network:
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.250.0.0/16

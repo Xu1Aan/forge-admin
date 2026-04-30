@@ -6,6 +6,16 @@ let stompClient = null
 let isConnected = false
 let isConnecting = false
 
+function normalizePrefix(prefix) {
+  if (!prefix)
+    return ''
+  const value = String(prefix).trim()
+  if (!value)
+    return ''
+  const withLeading = value.startsWith('/') ? value : `/${value}`
+  return withLeading.replace(/\/+$/, '')
+}
+
 /**
  * 初始化 WebSocket 客户端
  * - 仅在有 token 且未连接时执行
@@ -28,16 +38,22 @@ export function initWebSocketClient() {
 
   isConnecting = true
 
-  // 使用 SockJS 连接后端 /ws 端点
-  // 开发环境下直接连接后端服务(避免通过Vite代理的WebSocket兼容问题)
-  let socketUrl = '/ws'
+  // 使用 SockJS 连接后端 ws 端点
+  // 生产环境按请求前缀拼接（例如 /public/ims/ws）
+  // 开发环境优先直连 VITE_HTTP_PROXY_TARGET（继承其 path 前缀）
+  const requestPrefix = normalizePrefix(import.meta.env.VITE_REQUEST_PREFIX)
+  let socketUrl = `${requestPrefix}/ws`
+  if (!requestPrefix)
+    socketUrl = '/ws'
+
   if (import.meta.env.DEV && import.meta.env.VITE_HTTP_PROXY_TARGET) {
     try {
       const target = new URL(import.meta.env.VITE_HTTP_PROXY_TARGET)
-      socketUrl = `${target.origin}/ws`
+      const targetPath = normalizePrefix(target.pathname)
+      socketUrl = `${target.origin}${targetPath}/ws`
     }
     catch (e) {
-      console.warn('解析 VITE_HTTP_PROXY_TARGET 失败, 使用相对路径 /ws', e)
+      console.warn('解析 VITE_HTTP_PROXY_TARGET 失败, 使用相对路径 ws 端点', e)
     }
   }
   const socket = new SockJS(socketUrl, null, { transports: ['xhr-streaming', 'xhr-polling'] })

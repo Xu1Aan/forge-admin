@@ -36,7 +36,7 @@
 
           <n-space :size="12">
             <n-space :size="12">
-              <n-button secondary @click="openImport">
+              <n-button v-if="canImportExcel" secondary @click="openImport">
                 Excel导入
               </n-button>
               <n-button type="primary" @click="openCreate">
@@ -87,7 +87,7 @@
         <n-form ref="formRef" :model="edit.form" :rules="rules" label-placement="left" label-width="108">
         <n-grid :cols="isFormWide ? 2 : 1" :x-gap="20" :y-gap="16">
           <n-form-item-gi label="项目名" path="projectName">
-            <n-input v-model:value="edit.form.projectName" placeholder="请输入项目名" />
+            <n-input v-model:value="edit.form.projectName" placeholder="请输入项目名" :disabled="edit.readOnly" />
           </n-form-item-gi>
           <n-form-item-gi label="项目类别" path="projectCategory">
             <n-select
@@ -95,6 +95,7 @@
               placeholder="请选择"
               :options="categoryOptions"
               :consistent-menu-width="false"
+              :disabled="edit.readOnly"
             />
           </n-form-item-gi>
           <n-form-item-gi label="项目负责人" path="leaderUserId">
@@ -107,17 +108,19 @@
               :options="leaderOptions"
               :loading="userLoading"
               :consistent-menu-width="false"
+              :disabled="edit.readOnly"
               @search="handleUserSearch"
+              @update:value="onLeaderChange"
             />
           </n-form-item-gi>
           <n-form-item-gi label="立项时间" path="startDate">
-            <n-date-picker v-model:value="edit.form.startDate" type="date" clearable class="w-full" />
+            <n-date-picker v-model:value="edit.form.startDate" type="date" clearable class="w-full" :disabled="edit.readOnly" />
           </n-form-item-gi>
           <n-form-item-gi label="预计截止日期" path="planEndDate" :span="isFormWide ? 1 : 2">
-            <n-date-picker v-model:value="edit.form.planEndDate" type="date" clearable class="w-full" />
+            <n-date-picker v-model:value="edit.form.planEndDate" type="date" clearable class="w-full" :disabled="edit.readOnly" />
           </n-form-item-gi>
           <n-form-item-gi label="备注" path="remark" :span="2">
-            <n-input v-model:value="edit.form.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="选填" />
+            <n-input v-model:value="edit.form.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="选填" :disabled="edit.readOnly" />
           </n-form-item-gi>
 
           <n-gi :span="2">
@@ -128,18 +131,22 @@
           <n-form-item-gi :span="2" :show-label="false" :show-feedback="false" class="member-form-item member-form-item--stretch">
             <div class="member-panel">
               <div class="member-panel-head">
-                <span class="member-panel-hint">搜索添加成员，下方为已选列表（共 {{ edit.form.memberUserIds.length }} 人）</span>
+                <span class="member-panel-hint">
+                  {{ edit.readOnly ? `以下为项目成员列表（共 ${edit.form.memberUserIds.length} 人）` : `搜索添加成员，下方为已选列表（共 ${edit.form.memberUserIds.length} 人）` }}
+                </span>
               </div>
               <n-select
                 v-model:value="memberPickerValue"
                 filterable
                 remote
                 clearable
+                :clear-filter-after-select="true"
                 placeholder="搜索姓名或用户名，选中即加入列表"
                 :options="memberOptions"
                 :loading="userLoading"
                 :consistent-menu-width="false"
                 class="member-add-select"
+                :disabled="edit.readOnly"
                 @search="handleUserSearch"
                 @update:value="onPickMember"
               />
@@ -172,9 +179,9 @@
       <template #footer>
         <n-space justify="end" class="form-page-footer">
           <n-button :disabled="edit.saving" @click="closeForm">
-            取消
+            {{ edit.readOnly ? '关闭' : '取消' }}
           </n-button>
-          <n-button type="primary" :loading="edit.saving" @click="save">
+          <n-button v-if="!edit.readOnly" type="primary" :loading="edit.saving" @click="save">
             保存
           </n-button>
         </n-space>
@@ -231,7 +238,7 @@ import { h, nextTick, onMounted, reactive, ref, computed } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { NButton, NTag, NSpace } from 'naive-ui'
 import { projectCategoryLabel, PROJECT_CATEGORY_OPTIONS } from '@/constants/dept-daily-project-category'
-import { fetchProjectUsersBrief, pageProjects, getProjectDetail, createProject, updateProject, deleteProject, importProjectsExcel } from '@/api/dept-daily/project'
+import { fetchProjectUsersBrief, pageProjects, getProjectDetail, createProject, updateProject, deleteProject, importProjectsExcel, finishProject } from '@/api/dept-daily/project'
 import { pageUsers } from '@/api/system/user'
 import { useUserStore } from '@/store'
 
@@ -263,6 +270,42 @@ const pagination = reactive({
   pageSizes: [10, 20, 50],
 })
 
+function isLeaderForRow(row) {
+  if (!row)
+    return false
+  const uid = userStore.userId
+  if (uid == null)
+    return false
+  const leaderId = row.leaderUserId
+  if (leaderId == null)
+    return false
+  return Number(uid) === Number(leaderId)
+}
+
+const APPROVE_PERMISSION = 'dept:project:aprrove'
+
+function canApproveProject() {
+  const perms = userStore.permissions || []
+  return userStore.isAdmin
+    || userStore.isTenantAdmin
+    || perms.includes(APPROVE_PERMISSION)
+}
+
+const canImportExcel = computed(() => canApproveProject())
+
+function formatProjectStatus(status) {
+  const s = status || ''
+  if (s === 'DRAFT')
+    return { type: 'warning', label: '待审批' }
+  if (s === 'ACTIVE')
+    return { type: 'default', label: '进行中' }
+  if (s === 'DONE')
+    return { type: 'success', label: '已完成' }
+  if (s === 'CLOSED')
+    return { type: 'default', label: '已关闭' }
+  return { type: 'default', label: s || '—' }
+}
+
 const columns = [
   {
     title: '序号',
@@ -282,24 +325,48 @@ const columns = [
   { title: '项目立项时间', key: 'startDate', width: 140 },
   { title: '项目预计截止时间', key: 'planEndDate', width: 160 },
   {
-    title: '项目完成',
+    title: '项目状态',
     key: 'status',
     width: 110,
-    render: (row) => h(NTag, { type: row.status === 'DONE' ? 'success' : 'default', size: 'small' }, { default: () => (row.status === 'DONE' ? '已完成' : '进行中') }),
+    render: (row) => {
+      const { type, label } = formatProjectStatus(row.status)
+      return h(NTag, { type, size: 'small' }, { default: () => label })
+    },
   },
   {
     title: '操作',
     key: 'actions',
     width: 220,
     fixed: 'right',
-    render: (row) => h(NSpace, { size: 8 }, () => [
-      h(NButton, { size: 'small', secondary: true, onClick: () => openEdit(row) }, { default: () => '编辑' }),
-      h(NButton, { size: 'small', tertiary: true, type: 'error', onClick: () => onDeleteProject(row) }, { default: () => '删除' }),
-    ]),
+    render: (row) => {
+      const actions = []
+      const leader = isLeaderForRow(row)
+      const canApprove = canApproveProject()
+
+      // 所有人都可以查看
+      actions.push(h(NButton, { size: 'small', secondary: true, onClick: () => openView(row) }, { default: () => '查看' }))
+
+      // 待审批状态：只有具备审批权限的人才能审批
+      if (canApprove && row?.status === 'DRAFT') {
+        actions.push(h(NButton, { size: 'small', type: 'primary', onClick: () => onApproveProject(row) }, { default: () => '审批' }))
+      }
+
+      // 只有项目负责人可编辑/删除
+      if (leader) {
+        actions.push(h(NButton, { size: 'small', secondary: true, onClick: () => openEdit(row) }, { default: () => '编辑' }))
+        actions.push(h(NButton, { size: 'small', tertiary: true, type: 'error', onClick: () => onDeleteProject(row) }, { default: () => '删除' }))
+      }
+
+      return h(NSpace, { size: 8 }, () => actions)
+    },
   },
 ]
 
 function onDeleteProject(row) {
+  if (!isLeaderForRow(row)) {
+    window.$message?.warning('无权限')
+    return
+  }
   if (!row?.id)
     return
   const name = row.projectName || '该项目'
@@ -317,6 +384,37 @@ function onDeleteProject(row) {
       catch (e) {
         console.error(e)
         window.$message?.error(e?.response?.data?.message || e?.message || '删除失败')
+      }
+    },
+  })
+}
+
+function onApproveProject(row) {
+  if (!canApproveProject()) {
+    window.$message?.warning('无权限')
+    return
+  }
+  if (row?.status !== 'DRAFT') {
+    window.$message?.warning('项目不在待审批状态')
+    return
+  }
+  if (!row?.id)
+    return
+  const name = row.projectName || '该项目'
+  window.$dialog?.warning({
+    title: '确认审批？',
+    content: `将「${name}」状态从“待审批”更新为“进行中”。审批后即可进入下一步流程（如月报填报）。`,
+    positiveText: '审批通过',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await finishProject(row.id, { done: false })
+        window.$message?.success('审批通过')
+        await load()
+      }
+      catch (e) {
+        console.error(e)
+        window.$message?.error(e?.response?.data?.message || e?.message || '审批失败')
       }
     },
   })
@@ -374,6 +472,7 @@ const showForm = ref(false)
 
 const edit = reactive({
   saving: false,
+  readOnly: false,
   form: {
     id: null,
     projectName: '',
@@ -397,7 +496,11 @@ const formPageTitle = computed(() => {
 })
 
 const formPageSubtitle = computed(() =>
-  edit.form.id ? '修改项目信息与成员，保存后生效' : '填写下方信息完成立项；保存后可继续从列表进入编辑',
+  edit.readOnly
+    ? '查看项目信息与成员'
+    : edit.form.id
+      ? '修改项目信息与成员，保存后生效（仅负责人可编辑）'
+      : '填写下方信息完成立项；保存后进入“待审批”，审批通过后再进行月报填报',
 )
 
 const rules = {
@@ -412,6 +515,7 @@ const leaderOptions = ref([])
 const memberOptions = ref([])
 /** 仅用于「添加成员」单选，选中后写入 memberUserIds 并清空 */
 const memberPickerValue = ref(null)
+let userSearchSeq = 0
 
 const memberTableRows = ref([])
 const memberBriefLoading = ref(false)
@@ -428,19 +532,54 @@ function mapBriefRowToOption(row) {
 function applyRowsToPickerOptions(rows) {
   const opts = (rows || []).map(mapBriefRowToOption).filter(Boolean)
   leaderOptions.value = mergeUserOptions(leaderOptions.value, opts)
-  memberOptions.value = mergeUserOptions(memberOptions.value, opts)
+  // 成员添加下拉（memberPicker）只负责“新增选择”：
+  // 编辑回显时先重置 memberOptions，避免上一次搜索结果残留。
+  const selectedIds = new Set((edit.form.memberUserIds || []).map(v => Number(v)))
+  const optsForMember = opts.filter(o => !selectedIds.has(Number(o.value)))
+  memberOptions.value = optsForMember
+}
+
+function normalizeUserId(v) {
+  if (v == null || v === '')
+    return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+function hasMember(uid) {
+  return (edit.form.memberUserIds || []).some(x => Number(x) === Number(uid))
+}
+
+function ensureLeaderInMembers() {
+  const leaderId = normalizeUserId(edit.form.leaderUserId)
+  if (leaderId == null)
+    return
+  if (!hasMember(leaderId))
+    edit.form.memberUserIds = [leaderId, ...(edit.form.memberUserIds || [])]
+}
+
+function normalizeMemberRoles(rows) {
+  const leaderId = normalizeUserId(edit.form.leaderUserId)
+  return (rows || []).map((row) => {
+    const uid = normalizeUserId(row?.userId)
+    if (uid == null)
+      return row
+    const role = uid === leaderId ? 'LEADER' : 'MEMBER'
+    return { ...row, memberRole: row?.memberRole || role }
+  })
 }
 
 async function refreshMemberTable() {
   memberBriefLoading.value = true
   try {
+    ensureLeaderInMembers()
     const ids = edit.form.memberUserIds || []
     if (!ids.length) {
       memberTableRows.value = []
       return
     }
     const res = await fetchProjectUsersBrief(ids)
-    memberTableRows.value = res.data || []
+    memberTableRows.value = normalizeMemberRoles(res.data || [])
     applyRowsToPickerOptions(memberTableRows.value)
   }
   catch (e) {
@@ -505,31 +644,38 @@ const memberColumns = [
     key: 'actions',
     width: 76,
     fixed: 'right',
-    render: row => h(
-      NButton,
-      { size: 'small', quaternary: true, type: 'error', onClick: () => removeMember(row.userId) },
-      { default: () => '移除' },
-    ),
+    render: row => (edit.readOnly
+      ? '—'
+      : h(
+          NButton,
+          { size: 'small', quaternary: true, type: 'error', onClick: () => removeMember(row.userId) },
+          { default: () => '移除' },
+        )),
   },
 ]
 
 async function onPickMember(val) {
-  if (val == null || val === '')
+  if (edit.readOnly)
+    return
+  const uid = normalizeUserId(val)
+  if (uid == null)
     return
   const cur = edit.form.memberUserIds
-  if (cur.some(x => x === val || Number(x) === Number(val))) {
+  if (cur.some(x => Number(x) === uid)) {
     window.$message?.warning('该成员已在列表中')
+    memberPickerValue.value = undefined
     await nextTick()
-    memberPickerValue.value = null
     return
   }
-  cur.push(val)
+  cur.push(uid)
+  memberPickerValue.value = undefined
   await nextTick()
-  memberPickerValue.value = null
   await refreshMemberTable()
 }
 
 function removeMember(uid) {
+  if (edit.readOnly)
+    return
   edit.form.memberUserIds = edit.form.memberUserIds.filter(x => x !== uid)
   refreshMemberTable()
 }
@@ -560,20 +706,46 @@ function mergeUserOptions(existing, incoming) {
 
 async function handleUserSearch(q) {
   const kw = (q || '').trim()
-  if (!kw) return
+  if (!kw)
+    return
+  const seq = ++userSearchSeq
   userLoading.value = true
   try {
-    const res = await pageUsers({ pageNum: 1, pageSize: 20, realName: kw })
+    const res = await pageUsers({
+      pageNum: 1,
+      pageSize: 20,
+      realName: kw || undefined,
+      userStatus: 1,
+    })
+    if (seq !== userSearchSeq)
+      return
     const records = res.data?.records || res.data?.list || []
     const opts = records.map(u => mapUserToOption(u)).filter(Boolean)
-    leaderOptions.value = mergeUserOptions(leaderOptions.value, opts)
-    memberOptions.value = mergeUserOptions(memberOptions.value, opts)
+
+    // 成员添加下拉：过滤掉“已选成员”（负责人也属于已选成员）
+    const selectedIds = new Set((edit.form.memberUserIds || []).filter(v => v != null))
+    const optsForMember = opts.filter(o => !selectedIds.has(Number(o.value)))
+
+    // 负责人下拉：保证当前负责人选项一定存在，避免切换关键字后 label 丢失
+    const leaderId = normalizeUserId(edit.form.leaderUserId)
+    const selectedFromTable = (memberTableRows.value || []).map(mapBriefRowToOption).filter(Boolean)
+
+    const keepLeader = leaderId == null
+      ? []
+      : mergeUserOptions(
+          (leaderOptions.value || []).filter(o => Number(o.value) === leaderId),
+          (selectedFromTable || []).filter(o => Number(o.value) === leaderId),
+        )
+
+    leaderOptions.value = mergeUserOptions(keepLeader, opts)
+    memberOptions.value = optsForMember
   }
   catch (e) {
     console.error(e)
   }
   finally {
-    userLoading.value = false
+    if (seq === userSearchSeq)
+      userLoading.value = false
   }
 }
 
@@ -582,7 +754,8 @@ function resetForm() {
   edit.form.projectName = ''
   edit.form.leaderUserId = null
   edit.form.memberUserIds = []
-  memberPickerValue.value = null
+  edit.readOnly = false
+  memberPickerValue.value = undefined
   memberTableRows.value = []
   edit.form.startDate = null
   edit.form.planEndDate = null
@@ -590,8 +763,18 @@ function resetForm() {
   edit.form.projectCategory = null
 }
 
+async function onLeaderChange(v) {
+  const uid = normalizeUserId(v)
+  if (uid == null)
+    return
+  if (!hasMember(uid))
+    edit.form.memberUserIds = [uid, ...(edit.form.memberUserIds || [])]
+  await refreshMemberTable()
+}
+
 function openCreate() {
   resetForm()
+  edit.readOnly = false
   leaderOptions.value = []
   memberOptions.value = []
   showForm.value = true
@@ -606,6 +789,10 @@ const importer = reactive({
 })
 
 function openImport() {
+  if (!canImportExcel.value) {
+    window.$message?.warning('无权限：不能导入项目')
+    return
+  }
   importer.show = true
   importer.file = null
   importer.fileList = []
@@ -650,7 +837,12 @@ function closeForm() {
 }
 
 async function openEdit(row) {
+  if (!isLeaderForRow(row)) {
+    window.$message?.warning('无权限编辑项目')
+    return
+  }
   resetForm()
+  edit.readOnly = false
   edit.form.id = row.id
   edit.form.projectName = row.projectName
   edit.form.projectCategory = row.projectCategory || 'OTHER'
@@ -658,7 +850,7 @@ async function openEdit(row) {
   edit.form.memberUserIds = []
   edit.form.startDate = row.startDate ? new Date(row.startDate).getTime() : null
   edit.form.planEndDate = row.planEndDate ? new Date(row.planEndDate).getTime() : null
-  memberPickerValue.value = null
+  memberPickerValue.value = undefined
   showForm.value = true
 
   // 回显成员与备注：服务端 memberRows 带部门、电话及项目角色
@@ -670,8 +862,9 @@ async function openEdit(row) {
     const apiRows = res.data?.memberRows
     const membersFallback = res.data?.members || []
     if (apiRows != null) {
-      memberTableRows.value = apiRows
-      edit.form.memberUserIds = apiRows.map(r => r.userId).filter(Boolean)
+      memberTableRows.value = normalizeMemberRoles(apiRows)
+      edit.form.memberUserIds = memberTableRows.value.map(r => r.userId).filter(Boolean)
+      ensureLeaderInMembers()
       applyRowsToPickerOptions(apiRows)
     }
     else {
@@ -679,6 +872,7 @@ async function openEdit(row) {
         .filter(m => m?.isActive === 1)
         .map(m => m.userId)
         .filter(Boolean)
+      ensureLeaderInMembers()
       await refreshMemberTable()
     }
   }
@@ -687,7 +881,54 @@ async function openEdit(row) {
   }
 }
 
+async function openView(row) {
+  if (!row?.id)
+    return
+  resetForm()
+  edit.readOnly = true
+
+  edit.form.id = row.id
+  edit.form.projectName = row.projectName
+  edit.form.projectCategory = row.projectCategory || 'OTHER'
+  edit.form.leaderUserId = row.leaderUserId
+  edit.form.memberUserIds = []
+  edit.form.startDate = row.startDate ? new Date(row.startDate).getTime() : null
+  edit.form.planEndDate = row.planEndDate ? new Date(row.planEndDate).getTime() : null
+  memberPickerValue.value = undefined
+  showForm.value = true
+
+  // 回显：复用 getProjectDetail 以展示成员列表与备注
+  try {
+    const res = await getProjectDetail(row.id)
+    const proj = res.data?.project
+    if (proj?.remark != null)
+      edit.form.remark = proj.remark
+
+    const apiRows = res.data?.memberRows
+    if (apiRows != null) {
+      memberTableRows.value = normalizeMemberRoles(apiRows)
+      edit.form.memberUserIds = memberTableRows.value.map(r => r.userId).filter(Boolean)
+      ensureLeaderInMembers()
+      applyRowsToPickerOptions(apiRows)
+      return
+    }
+
+    const membersFallback = res.data?.members || []
+    edit.form.memberUserIds = membersFallback
+      .filter(m => m?.isActive === 1)
+      .map(m => m.userId)
+      .filter(Boolean)
+    ensureLeaderInMembers()
+    await refreshMemberTable()
+  }
+  catch (e) {
+    console.error(e)
+  }
+}
+
 async function save() {
+  if (edit.readOnly)
+    return
   try {
     await formRef.value?.validate?.()
   }
@@ -702,6 +943,7 @@ async function save() {
 
   edit.saving = true
   try {
+    ensureLeaderInMembers()
     const body = {
       id: edit.form.id || undefined,
       projectName: edit.form.projectName?.trim(),
