@@ -41,7 +41,7 @@
                 提交
               </n-button>
             </template>
-            将提交当月已填写的项目月报，提交后可能无法继续修改，是否继续？
+            将正式提交当月已填写的项目月报（可随时修改并由自动保存生效；也可再次提交以更新提交时间）。是否继续？
           </n-popconfirm>
         </n-space>
       </template>
@@ -70,7 +70,7 @@
           <n-empty description="暂无可填报项目月报（需先完成项目状态审批，且仅负责人可填）" />
         </div>
 
-        <n-collapse v-else class="report-collapse" :default-expanded-names="defaultExpanded">
+        <n-collapse v-else v-model:expanded-names="expandedNames" class="report-collapse">
           <n-collapse-item
             v-for="(p, idx) in projects"
             :key="p.id"
@@ -102,16 +102,17 @@
             </template>
 
             <div class="panel">
-              <n-input
-                :key="`${p.id}-${formVersion}`"
-                :default-value="form[p.id]"
-                type="textarea"
-                :autosize="false"
-                :rows="6"
-                placeholder="填写本月项目总体进展/总结（建议：里程碑、交付物、风险、下月计划）"
-                @update:value="v => onChange(p.id, v)"
-                @blur="() => flushDraft(p.id)"
-              />
+              <div class="panel-editor" v-memo="[form[p.id], formVersion]">
+                <n-input
+                  v-model:value="form[p.id]"
+                  type="textarea"
+                  :autosize="false"
+                  :rows="6"
+                  placeholder="填写本月项目总体进展/总结（建议：里程碑、交付物、风险、下月计划）"
+                  @update:value="() => onInput(p.id)"
+                  @blur="() => flushDraft(p.id)"
+                />
+              </div>
 
               <div class="panel-actions">
                 <n-space align="center" justify="space-between" wrap>
@@ -171,16 +172,16 @@ const lastSaved = reactive({})
 const dirty = reactive({})
 const savingMap = reactive({})
 const timers = new Map()
-// 仅在重新加载数据时强制重挂载输入框，避免自动保存导致的重渲染重置光标
 const formVersion = ref(0)
+const expandedNames = ref([])
 
-const defaultExpanded = computed(() => {
+function computeExpandedInitialNames() {
   const ids = projects.value.slice(0, 3).map(p => p.id)
   for (const p of projects.value) {
     if ((form[p.id] || '').trim().length) ids.push(p.id)
   }
   return Array.from(new Set(ids))
-})
+}
 
 const filledCount = computed(() => projects.value.filter(p => (form[p.id] || '').trim().length > 0).length)
 const dirtyCount = computed(() => projects.value.filter(p => dirty[p.id]).length)
@@ -220,6 +221,7 @@ async function load() {
       dirty[it.projectId] = false
       savingMap[it.projectId] = false
     }
+    expandedNames.value = computeExpandedInitialNames()
     formVersion.value++
   }
   catch (e) {
@@ -235,9 +237,8 @@ function reload() {
   load()
 }
 
-function onChange(projectId, v) {
-  form[projectId] = v
-  dirty[projectId] = (String(v || '') !== String(lastSaved[projectId] || ''))
+function onInput(projectId) {
+  dirty[projectId] = (String(form[projectId] || '') !== String(lastSaved[projectId] || ''))
   scheduleDraft(projectId)
 }
 

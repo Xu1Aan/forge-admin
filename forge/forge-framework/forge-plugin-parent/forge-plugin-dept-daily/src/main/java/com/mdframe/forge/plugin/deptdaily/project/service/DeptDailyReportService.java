@@ -66,13 +66,13 @@ public class DeptDailyReportService {
                 .last("limit 1"));
 
         boolean submit = Boolean.TRUE.equals(req.getSubmit());
-        LocalDateTime submittedAt = submit ? LocalDateTime.now() : null;
-        String status = submit ? "SUBMITTED" : "DRAFT";
 
         // 先确保月报总表存在并允许修改
         upsertUserSheet(tenantId, uid, p.getDeptId(), p.getOfficeId(), ym.format(YM_FMT), submit);
 
         if (existing == null) {
+            String status = submit ? "SUBMITTED" : "DRAFT";
+            LocalDateTime submittedAt = submit ? LocalDateTime.now() : null;
             DeptDailyUserMonthReportItem it = new DeptDailyUserMonthReportItem();
             it.setTenantId(tenantId);
             it.setDeptId(p.getDeptId());
@@ -90,9 +90,20 @@ public class DeptDailyReportService {
             return it.getId();
         }
 
-        // 已提交不允许覆盖（避免误改）
-        if ("SUBMITTED".equals(existing.getStatus()) && !submit) {
-            throw new IllegalStateException("已提交的月报不可修改");
+        // 已提交后仍可自动保存草稿内容；草稿保存不改变已提交状态，正式提交更新提交时间
+        String status;
+        LocalDateTime submittedAt;
+        if (submit) {
+            status = "SUBMITTED";
+            submittedAt = LocalDateTime.now();
+        }
+        else if ("SUBMITTED".equals(existing.getStatus())) {
+            status = "SUBMITTED";
+            submittedAt = existing.getSubmittedAt();
+        }
+        else {
+            status = "DRAFT";
+            submittedAt = null;
         }
 
         existing.setProgressText(StringUtils.trim(req.getProgressText()));
@@ -136,10 +147,10 @@ public class DeptDailyReportService {
                 .last("limit 1"));
 
         boolean submit = Boolean.TRUE.equals(req.getSubmit());
-        LocalDateTime submittedAt = submit ? LocalDateTime.now() : null;
-        String status = submit ? "SUBMITTED" : "DRAFT";
 
         if (existing == null) {
+            String status = submit ? "SUBMITTED" : "DRAFT";
+            LocalDateTime submittedAt = submit ? LocalDateTime.now() : null;
             DeptDailyProjectMonthReport r = new DeptDailyProjectMonthReport();
             r.setTenantId(tenantId);
             r.setDeptId(p.getDeptId());
@@ -156,8 +167,19 @@ public class DeptDailyReportService {
             return r.getId();
         }
 
-        if ("SUBMITTED".equals(existing.getStatus()) && !submit) {
-            throw new IllegalStateException("已提交的项目月报不可修改");
+        String status;
+        LocalDateTime submittedAt;
+        if (submit) {
+            status = "SUBMITTED";
+            submittedAt = LocalDateTime.now();
+        }
+        else if ("SUBMITTED".equals(existing.getStatus())) {
+            status = "SUBMITTED";
+            submittedAt = existing.getSubmittedAt();
+        }
+        else {
+            status = "DRAFT";
+            submittedAt = null;
         }
 
         existing.setSummaryText(StringUtils.trim(req.getSummaryText()));
@@ -212,9 +234,7 @@ public class DeptDailyReportService {
             return;
         }
 
-        if ("SUBMITTED".equals(sheet.getStatus()) && !submit) {
-            throw new IllegalStateException("本月月报已提交，不可修改");
-        }
+        // 当月总表已为「已提交」时仍允许同步各项目明细（自动保存）；仅在有新的正式提交时再刷新 submittedAt
         if (employeeType != null && (sheet.getEmployeeType() == null || !employeeType.equals(sheet.getEmployeeType()))) {
             sheet.setEmployeeType(employeeType);
         }

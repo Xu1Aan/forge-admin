@@ -1,3 +1,7 @@
+server:
+  # 服务器的HTTP端口，默认为8080
+  # port: 8580
+  port: 80
 spring:
   datasource:
     type: com.zaxxer.hikari.HikariDataSource

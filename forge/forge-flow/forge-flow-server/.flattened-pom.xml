@@ -4,13 +4,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>com.mdframe.forge</groupId>
-    <artifactId>forge</artifactId>
+    <artifactId>forge-flow</artifactId>
     <version>1.0.0</version>
   </parent>
   <groupId>com.mdframe.forge</groupId>
   <artifactId>forge-flow-server</artifactId>
   <version>1.0.0</version>
-  <name>forge-flow-service</name>
+  <name>forge-flow-server</name>
   <description>Forge Flow 流程服务 - 基于 Flowable 的独立流程服务</description>
   <dependencies>
     <dependency>

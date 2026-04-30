@@ -34,8 +34,12 @@ public class SystemLogServiceImpl implements ILogService {
             if (logInfo.getUserId() != null) {
                 try {
                     SysUser sysUser = sysUserMapper.selectById(logInfo.getUserId());
-                    logInfo.setUsername(sysUser.getUsername());
-                    logInfo.setTenantId(sysUser.getTenantId());
+                    if (sysUser != null) {
+                        logInfo.setUsername(sysUser.getUsername());
+                        logInfo.setTenantId(sysUser.getTenantId());
+                    } else {
+                        log.debug("补充操作日志用户信息：userId={} 在 sys_user 中不存在", logInfo.getUserId());
+                    }
                 } catch (Exception e) {
                     log.debug("从Session获取用户信息失败", e);
                 }
@@ -58,8 +62,12 @@ public class SystemLogServiceImpl implements ILogService {
             if (logInfo.getUserId() != null) {
                 try {
                     SysUser sysUser = sysUserMapper.selectById(logInfo.getUserId());
-                    logInfo.setUsername(sysUser.getUsername());
-                    logInfo.setTenantId(sysUser.getTenantId());
+                    if (sysUser != null) {
+                        logInfo.setUsername(sysUser.getUsername());
+                        logInfo.setTenantId(sysUser.getTenantId());
+                    } else {
+                        log.debug("补充登录日志用户信息：userId={} 在 sys_user 中不存在", logInfo.getUserId());
+                    }
                 } catch (Exception e) {
                     log.debug("从SysUser获取用户信息失败", e);
                 }

@@ -41,7 +41,7 @@
                 提交
               </n-button>
             </template>
-            将提交当月已填写的工作月报，提交后可能无法继续修改，是否继续？
+            将正式提交当月已填写的工作月报（可随时修改并由自动保存生效；也可再次提交以更新提交时间）。是否继续？
           </n-popconfirm>
         </n-space>
       </template>
@@ -70,7 +70,7 @@
           <n-empty description="暂无可填报项目（可能都已截止或未加入项目组）" />
         </div>
 
-        <n-collapse v-else class="report-collapse" :default-expanded-names="defaultExpanded">
+        <n-collapse v-else v-model:expanded-names="expandedNames" class="report-collapse">
           <n-collapse-item
             v-for="(p, idx) in projects"
             :key="p.id"
@@ -102,16 +102,18 @@
             </template>
 
             <div class="panel">
-              <n-input
-                :key="`${p.id}-${formVersion}`"
-                :default-value="form[p.id]"
-                type="textarea"
-                :autosize="false"
-                :rows="6"
-                placeholder="填写本月工作内容/进展情况（建议：做了什么、进度到哪、阻塞点、下步计划）"
-                @update:value="v => onChange(p.id, v)"
-                @blur="() => flushDraft(p.id)"
-              />
+              <!-- v-memo：自动保存仅更新 dirty/savingMap 时不重渲染输入框，避免 Naive textarea 光标跳至末尾 -->
+              <div class="panel-editor" v-memo="[form[p.id], formVersion]">
+                <n-input
+                  v-model:value="form[p.id]"
+                  type="textarea"
+                  :autosize="false"
+                  :rows="6"
+                  placeholder="填写本月工作内容/进展情况（建议：做了什么、进度到哪、阻塞点、下步计划）"
+                  @update:value="() => onInput(p.id)"
+                  @blur="() => flushDraft(p.id)"
+                />
+              </div>
 
               <div class="panel-actions">
                 <n-space align="center" justify="space-between" wrap>
@@ -169,17 +171,18 @@ const lastSaved = reactive({})
 const dirty = reactive({})
 const savingMap = reactive({})
 const timers = new Map()
-// 仅在重新加载数据时强制重挂载输入框，避免自动保存导致的重渲染重置光标
+// load 成功后递增，仅在需要与服务器快照对齐时强制重挂载输入框
 const formVersion = ref(0)
+/** 折叠展开受控：勿用随输入实时变动的 computed，否则整张面板重渲染会干扰 textarea 光标 */
+const expandedNames = ref([])
 
-const defaultExpanded = computed(() => {
-  // 默认展开前 3 个 + 有内容的
+function computeExpandedInitialNames() {
   const ids = projects.value.slice(0, 3).map(p => p.id)
   for (const p of projects.value) {
     if ((form[p.id] || '').trim().length) ids.push(p.id)
   }
   return Array.from(new Set(ids))
-})
+}
 
 const filledCount = computed(() => projects.value.filter(p => (form[p.id] || '').trim().length > 0).length)
 const dirtyCount = computed(() => projects.value.filter(p => dirty[p.id]).length)
@@ -210,6 +213,7 @@ async function load() {
       dirty[p.id] = false
       savingMap[p.id] = false
     }
+    expandedNames.value = computeExpandedInitialNames()
     formVersion.value++
   }
   catch (e) {
@@ -225,9 +229,8 @@ function reload() {
   load()
 }
 
-function onChange(projectId, v) {
-  form[projectId] = v
-  dirty[projectId] = (String(v || '') !== String(lastSaved[projectId] || ''))
+function onInput(projectId) {
+  dirty[projectId] = (String(form[projectId] || '') !== String(lastSaved[projectId] || ''))
   scheduleDraft(projectId)
 }
 
@@ -300,7 +303,6 @@ async function submitAll() {
     })))
 
     window.$message?.success(`已提交 ${submitTargets.length} 条工作月报`)
-    // 重新加载以回显后端最新状态（若后端有“已提交不可改”等逻辑）
     await load()
   }
   catch (e) {

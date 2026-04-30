@@ -11,9 +11,41 @@ import removeNoMatch from 'vite-plugin-router-warn'
 import VueDevTools from 'vite-plugin-vue-devtools'
 import { pluginIcons, pluginPagePathes } from './build/plugin-isme'
 
+/**
+ * 开发代理目标：须指向 Spring Boot 根（与 server.servlet.context-path=/ 一致）。
+ * 若把生产站点地址 http://host/public/ims/ 原样填进 target，http-proxy 会请求 /public/ims/auth/...，
+ * 而后端只有 /auth/...，会 404（全局异常里「请求的资源不存在」）。
+ */
+function resolveHttpProxyTarget(raw) {
+  if (!raw)
+    return raw
+  try {
+    const normalized = /:\/\//.test(raw) ? raw : `http://${raw}`
+    const u = new URL(normalized.endsWith('/') ? normalized : `${normalized}/`)
+    const pathOnly = (u.pathname || '/').replace(/\/$/, '')
+    /** 已知「前端挂载前缀」，不是 JVM context-path（项目后端均为 /），开发代理应直连接口根 */
+    const stripPrefixes = ['/public/ims']
+    for (const prefix of stripPrefixes) {
+      if (pathOnly === prefix || pathOnly.startsWith(`${prefix}/`)) {
+        const origin = `${u.protocol}//${u.host}${u.port ? `:${u.port}` : ''}/`
+        console.warn(
+          `[vite] VITE_HTTP_PROXY_TARGET 含有站点前缀「${pathOnly}」，已改为「${origin}」再转发。\n`
+          + '若你的 JVM 挂在 Nginx location 后才可访问（非直连），请改用内部端口或由运维提供「仅后端」的根地址。\n',
+        )
+        return origin
+      }
+    }
+    return raw
+  }
+  catch {
+    return raw
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const viteEnv = loadEnv(mode, process.cwd())
   const { VITE_HTTP_PORT, VITE_REQUEST_PREFIX, VITE_PUBLIC_PATH, VITE_HTTP_PROXY_TARGET, VITE_FLOW_PROXY_TARGET } = viteEnv
+  const mainProxyTarget = resolveHttpProxyTarget(VITE_HTTP_PROXY_TARGET)
 
   return {
     base: VITE_PUBLIC_PATH || '/',
@@ -81,7 +113,7 @@ export default defineConfig(({ mode }) => {
         // 主代理 - 匹配所有其他请求
         [VITE_REQUEST_PREFIX]: {
           secure: false,
-          target: VITE_HTTP_PROXY_TARGET,
+          target: mainProxyTarget,
           changeOrigin: true,
           rewrite: path => path.replace(new RegExp(`^${VITE_REQUEST_PREFIX}`), ''),
           configure: (proxy, options) => {
@@ -93,7 +125,7 @@ export default defineConfig(({ mode }) => {
         },
         // WebSocket 代理到后端同一服务
         '/ws': {
-          target: VITE_HTTP_PROXY_TARGET,
+          target: mainProxyTarget,
           changeOrigin: true,
           ws: true,
           secure: false,

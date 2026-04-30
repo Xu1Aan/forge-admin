@@ -1366,6 +1366,22 @@ CREATE TABLE `sys_post`
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='岗位表';
 
 
+-- forge_admin_new.sys_region_code definition（行政区划字典，数据需单独导入或维护）
+
+CREATE TABLE `sys_region_code`
+(
+    `code`         varchar(20)  NOT NULL COMMENT '行政区划代码（GB/T 2260）',
+    `name`         varchar(100) NOT NULL COMMENT '区划简称',
+    `level`        tinyint      NOT NULL COMMENT '级别(1-省,2-市,3-区/县,4-街道)',
+    `parent_code`  varchar(20)           DEFAULT NULL COMMENT '父级代码',
+    `full_name`    varchar(255)          DEFAULT NULL COMMENT '全称',
+    `city_code`    varchar(20)           DEFAULT NULL COMMENT '地市编码',
+    PRIMARY KEY (`code`),
+    KEY            `idx_parent_code` (`parent_code`),
+    KEY            `idx_level` (`level`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='行政区划字典表';
+
+
 -- forge_admin_new.sys_resource definition
 
 CREATE TABLE `sys_resource`
@@ -1390,6 +1406,7 @@ CREATE TABLE `sys_resource`
     `always_show`   tinyint               DEFAULT '0' COMMENT '是否总是显示（0-否，1-是，菜单用）',
     `redirect`      varchar(255)          DEFAULT NULL COMMENT '重定向地址（菜单用）',
     `remark`        varchar(500)          DEFAULT NULL COMMENT '备注',
+    `client_code`   varchar(50)  NOT NULL DEFAULT 'pc' COMMENT '客户端编码（如 pc、与 sys_client 对应）',
     `create_by`     bigint                DEFAULT NULL COMMENT '创建者',
     `create_time`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_by`     bigint                DEFAULT NULL COMMENT '更新者',
@@ -1398,6 +1415,7 @@ CREATE TABLE `sys_resource`
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_tenant_resource` (`tenant_id`,`resource_type`,`perms`) COMMENT '租户内资源权限标识唯一',
     KEY             `idx_tenant_parent` (`tenant_id`,`parent_id`),
+    KEY             `idx_tenant_client` (`tenant_id`,`client_code`),
     KEY             `idx_resource_type` (`resource_type`),
     KEY             `idx_api_url_method` (`api_url`,`api_method`) COMMENT 'API查询优化'
 ) ENGINE=InnoDB AUTO_INCREMENT=9051 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统资源表（菜单/按钮/API）';
