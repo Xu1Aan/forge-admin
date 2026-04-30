@@ -115,106 +115,6 @@
               </div>
             </div>
 
-            <!-- 验证码区域 - 根据配置显示不同类型的验证码 -->
-            <div class="form-group">
-              <!-- 图形验证码 -->
-              <template v-if="captchaType === 'graphical'">
-                <label for="captcha" class="form-label">验证码</label>
-                <div class="captcha-wrapper">
-                  <div class="input-wrapper flex-1">
-                    <n-input
-                      id="captcha"
-                      v-model:value="loginInfo.code"
-                      class="modern-input"
-                      placeholder="请输入验证码"
-                      :maxlength="6"
-                      size="large"
-                      @keydown.enter="handleLogin()"
-                    >
-                      <template #prefix>
-                        <i class="input-icon ai-icon:key" />
-                      </template>
-                    </n-input>
-                  </div>
-                  <div
-                    class="captcha-image"
-                    title="点击刷新验证码"
-                    role="button"
-                    tabindex="0"
-                    @click="refreshCaptcha"
-                    @keydown.enter="refreshCaptcha"
-                  >
-                    <img
-                      v-if="captchaImage"
-                      :src="captchaImage"
-                      alt="验证码"
-                      class="captcha-img"
-                    >
-                    <div v-else class="captcha-loading">
-                      <i class="ai-icon:loader animate-spin" />
-                    </div>
-                  </div>
-                </div>
-              </template>
-
-              <!-- 滑块验证码 - 已改为浮层弹出形式，点击登录按钮触发 -->
-              <template v-if="captchaType === 'slider'">
-                <div class="slider-verify-trigger" :class="{ verified: sliderSuccess }" @click="!sliderSuccess && openSliderModal()">
-                  <div class="trigger-icon">
-                    <i v-if="sliderSuccess" class="ai-icon:check-circle" style="color:#22C55E" />
-                    <i v-else class="ai-icon:shield" />
-                  </div>
-                  <span>{{ sliderSuccess ? '安全验证已通过' : '点击进行安全验证' }}</span>
-                  <i v-if="!sliderSuccess" class="trigger-arrow ai-icon:chevron-right" />
-                </div>
-              </template>
-
-              <!-- 短信验证码 -->
-              <template v-if="captchaType === 'sms'">
-                <label for="phone" class="form-label">手机号</label>
-                <div class="input-wrapper mb-3">
-                  <n-input
-                    id="phone"
-                    v-model:value="loginInfo.phone"
-                    class="modern-input"
-                    placeholder="请输入手机号"
-                    :maxlength="11"
-                    size="large"
-                  >
-                    <template #prefix>
-                      <i class="input-icon ai-icon:phone" />
-                    </template>
-                  </n-input>
-                </div>
-                <label for="smsCode" class="form-label">短信验证码</label>
-                <div class="captcha-wrapper">
-                  <div class="input-wrapper flex-1">
-                    <n-input
-                      id="smsCode"
-                      v-model:value="loginInfo.code"
-                      class="modern-input"
-                      placeholder="请输入短信验证码"
-                      :maxlength="6"
-                      size="large"
-                      @keydown.enter="handleLogin()"
-                    >
-                      <template #prefix>
-                        <i class="input-icon ai-icon:key" />
-                      </template>
-                    </n-input>
-                  </div>
-                  <n-button
-                    :disabled="smsCountdown > 0 || !isValidPhone"
-                    class="sms-button"
-                    size="large"
-                    @click="sendSmsCode"
-                  >
-                    {{ smsCountdown > 0 ? `${smsCountdown}s后重发` : '获取验证码' }}
-                  </n-button>
-                </div>
-              </template>
-            </div>
-
             <!-- Remember me -->
             <div class="form-options">
               <n-checkbox
@@ -232,7 +132,7 @@
               size="large"
               :loading="loading"
               block
-              @click="onLoginClick()"
+              @click="handleLogin()"
             >
               <span class="button-text">登录</span>
               <i v-if="!loading" class="button-icon ai-icon:arrow-right" />
@@ -280,64 +180,10 @@
       </div>
     </div>
   </div>
-
-  <!-- 滑块验证浮层 -->
-  <Transition name="modal">
-    <div v-if="showSliderModal" class="slider-modal-overlay" @click.self="closeSliderModal">
-      <div class="slider-modal">
-        <!-- 关闭按钮 -->
-        <button class="slider-modal-close" @click="closeSliderModal">
-          <i class="ai-icon:x" />
-        </button>
-
-        <!-- 标题区 -->
-        <div class="slider-modal-header">
-          <div class="slider-modal-icon">
-            <i class="ai-icon:shield" />
-          </div>
-          <h3 class="slider-modal-title">
-            安全验证
-          </h3>
-          <p class="slider-modal-desc">
-            请拖动滑块到正确位置，完成拼图
-          </p>
-        </div>
-
-        <!-- 滑块验证组件 -->
-        <div class="slider-modal-body">
-          <SlideVerify
-            ref="slideVerifyRef"
-            :w="340"
-            :h="170"
-            :slider-l="42"
-            :slider-r="8"
-            :accuracy="8"
-            :imgs="slideImages"
-            :show-refresh="true"
-            refresh-text="刷新"
-            text="拖动滑块完成拼图"
-            success-text="验证成功！"
-            fail-text="验证失败，请重试"
-            @success="onSlideSuccess"
-            @fail="onSlideFail"
-            @refresh="onSlideRefresh"
-          />
-        </div>
-
-        <!-- 底部辅助文字 -->
-        <p class="slider-modal-tip">
-          <i class="ai-icon:info" />
-          如果拖动困难，可点击刷新重试
-        </p>
-      </div>
-    </div>
-  </Transition>
 </template>
 
 <script setup>
 import { useStorage } from '@vueuse/core'
-import { nextTick } from 'vue'
-import SlideVerify from 'vue3-slide-verify'
 import mainApi from '@/api'
 import { useAuthStore, usePermissionStore, useUserStore } from '@/store'
 import { lStorage } from '@/utils'
@@ -345,7 +191,6 @@ import { encryptPassword, initKeyExchange } from '@/utils/crypto/key-exchange'
 import { request } from '@/utils/http'
 import api from './api'
 import fanweiLogo from '@/assets/images/fanwei.png'
-import 'vue3-slide-verify/dist/style.css'
 
 const authStore = useAuthStore()
 const userStore = useUserStore()
@@ -356,28 +201,7 @@ const title = import.meta.env.VITE_TITLE
 const loginInfo = ref({
   username: '',
   password: '',
-  code: '', // 验证码
-  codeKey: '', // 验证码key
-  phone: '', // 手机号（短信验证码使用）
 })
-
-const captchaImage = ref('') // 验证码图片（Base64）
-const captchaExpires = ref(0) // 验证码过期时间
-
-// 验证码类型：graphical(图形验证码), slider(滑块验证码), sms(短信验证码)
-const captchaType = ref('graphical')
-const loginConfig = ref(null)
-
-// 滑块验证码相关 (vue3-slide-verify)
-const slideVerifyRef = ref(null)
-const slideImages = ref([]) // 滑块验证码背景图片列表
-const sliderSuccess = ref(false)
-const sliderFail = ref(false)
-const showSliderModal = ref(false) // 滑块浮层显示状态
-
-// 短信验证码相关
-const smsCountdown = ref(0)
-const smsTimer = ref(null)
 
 const localLoginInfo = lStorage.get('loginInfo')
 if (localLoginInfo) {
@@ -393,32 +217,6 @@ const socialPlatforms = ref([])
 const socialLoading = ref(false)
 const weaverSsoEnabled = ref(import.meta.env.VITE_WEAVER_SSO_ENABLED !== 'false')
 const showOtherLogin = computed(() => socialPlatforms.value.length > 0 || weaverSsoEnabled.value)
-
-// 手机号验证
-const isValidPhone = computed(() => {
-  const phone = loginInfo.value.phone
-  return phone && /^1[3-9]\d{9}$/.test(phone)
-})
-
-// 获取登录配置
-async function loadLoginConfig() {
-  try {
-    const res = await api.getLoginConfig()
-    if (res.code === 200 && res.data) {
-      loginConfig.value = res.data
-      captchaType.value = res.data.captchaType || 'graphical'
-
-      // 根据验证码类型加载对应的验证码
-      await loadCaptchaByType()
-    }
-  }
-  catch (error) {
-    console.error('获取登录配置失败:', error)
-    // 使用默认配置
-    captchaType.value = 'graphical'
-    await refreshCaptcha()
-  }
-}
 
 // 获取已启用的三方登录平台
 async function loadSocialPlatforms() {
@@ -500,234 +298,26 @@ function handleWeaverLogin() {
   window.location.href = authUrl
 }
 
-// 根据验证码类型加载验证码
-async function loadCaptchaByType() {
-  switch (captchaType.value) {
-    case 'slider':
-      // 加载滑块验证码图片
-      await loadSlideImages()
-      // 重置滑块状态
-      sliderSuccess.value = false
-      sliderFail.value = false
-      loginInfo.value.code = ''
-      // 注意：组件实例在模板渲染后才可用，不在此处调用reset
-      break
-    case 'sms':
-      // 短信验证码不需要预加载，用户点击发送时才获取
-      break
-    case 'graphical':
-    default:
-      await refreshCaptcha()
-      break
-  }
-}
-
-// 获取图形验证码
-async function refreshCaptcha() {
-  try {
-    const res = await api.getCaptcha()
-    if (res.code === 200 && res.data) {
-      loginInfo.value.codeKey = res.data.codeKey // 验证码key
-      captchaImage.value = res.data.image || '' // 验证码图片（Base64）
-      captchaExpires.value = res.data.expiresIn || 300 // 过期时间
-
-      // 清空验证码输入框
-      loginInfo.value.code = ''
-
-      // 开发环境在控制台提示验证码
-      if (import.meta.env.DEV && res.data.code) {
-        console.log('【开发提示】验证码:', res.data.code)
-      }
-    }
-  }
-  catch (error) {
-    console.error('获取验证码失败:', error)
-    $message.error('获取验证码失败')
-  }
-}
-
-// 加载滑块验证码图片列表
-async function loadSlideImages() {
-  // 使用可靠的图片源，避免加载失败
-  // 实际项目中可以配置自己的图片或使用后端提供的图片
-  slideImages.value = [
-    'https://picsum.photos/id/10/320/160',
-    'https://picsum.photos/id/11/320/160',
-    'https://picsum.photos/id/12/320/160',
-    'https://picsum.photos/id/13/320/160',
-    'https://picsum.photos/id/14/320/160',
-  ]
-}
-
-// 打开滑块验证浮层
-function openSliderModal() {
-  showSliderModal.value = true
-  // 浮层打开后重置验证状态
-  nextTick(() => {
-    if (slideVerifyRef.value && typeof slideVerifyRef.value.refresh === 'function') {
-      slideVerifyRef.value.refresh()
-    }
-  })
-}
-
-// 关闭滑块验证浮层
-function closeSliderModal() {
-  showSliderModal.value = false
-}
-
-// 登录按钮点击处理
-function onLoginClick() {
-  if (captchaType.value === 'slider' && !sliderSuccess.value) {
-    openSliderModal()
-    return
-  }
-  handleLogin()
-}
-
-// 滑块验证成功回调
-function onSlideSuccess() {
-  sliderSuccess.value = true
-  sliderFail.value = false
-  loginInfo.value.code = 'verified'
-  console.log('滑块验证成功')
-  // 延迟关闭浮层再登录，让用户看到成功动画
-  setTimeout(() => {
-    closeSliderModal()
-    handleLogin()
-  }, 800)
-}
-
-// 滑块验证失败回调
-function onSlideFail() {
-  sliderFail.value = true
-  sliderSuccess.value = false
-  loginInfo.value.code = ''
-  console.log('滑块验证失败')
-}
-
-// 刷新滑块验证码
-function onSlideRefresh() {
-  sliderSuccess.value = false
-  sliderFail.value = false
-  loginInfo.value.code = ''
-  // 组件会自动刷新，这里可以添加额外的逻辑
-}
-
-// 处理登录失败
-async function handleLoginFailure() {
-  // 根据验证码类型处理
-  if (captchaType.value === 'slider') {
-    // 滑块验证码需要重置组件
-    sliderSuccess.value = false
-    sliderFail.value = false
-    loginInfo.value.code = ''
-    // 等待 DOM 更新后调用组件刷新方法
-    await nextTick()
-    if (slideVerifyRef.value && typeof slideVerifyRef.value.refresh === 'function') {
-      slideVerifyRef.value.refresh()
-    }
-  }
-  else if (captchaType.value === 'graphical') {
-    // 图形验证码刷新
-    await refreshCaptcha()
-  }
-  // 短信验证码不需要刷新，保持原样
-}
-
-// 发送短信验证码
-async function sendSmsCode() {
-  if (!isValidPhone.value) {
-    $message.warning('请输入正确的手机号')
-    return
-  }
-
-  try {
-    const res = await api.sendSmsCaptcha(loginInfo.value.phone)
-    if (res.code === 200 && res.data) {
-      if (res.data.status === 'success') {
-        $message.success('验证码发送成功')
-
-        // 开发环境在控制台提示验证码
-        if (import.meta.env.DEV && res.data.code) {
-          console.log('【开发提示】短信验证码:', res.data.code)
-        }
-
-        // 开始倒计时
-        smsCountdown.value = res.data.interval || 60
-        startSmsCountdown()
-      }
-      else {
-        $message.error(res.data.message || '验证码发送失败')
-      }
-    }
-  }
-  catch (error) {
-    console.error('发送短信验证码失败:', error)
-    $message.error('发送短信验证码失败')
-  }
-}
-
-// 短信验证码倒计时
-function startSmsCountdown() {
-  if (smsTimer.value) {
-    clearInterval(smsTimer.value)
-  }
-
-  smsTimer.value = setInterval(() => {
-    if (smsCountdown.value > 0) {
-      smsCountdown.value--
-    }
-    else {
-      clearInterval(smsTimer.value)
-    }
-  }, 1000)
-}
-
 async function handleLogin() {
-  const { username, password, code, codeKey, phone } = loginInfo.value
+  const { username, password } = loginInfo.value
 
-  // 基础验证
   if (!username || !password)
     return $message.warning('请输入用户名和密码')
-
-  // 根据验证码类型进行验证
-  if (captchaType.value === 'slider') {
-    if (!sliderSuccess.value) {
-      return $message.warning('请完成滑块验证')
-    }
-    // 滑块验证码使用组件自带的验证，这里只需要确认已通过
-    // 为了安全，可以添加一个临时的token或codeKey
-  }
-  else if (captchaType.value === 'sms') {
-    if (!phone)
-      return $message.warning('请输入手机号')
-    if (!code)
-      return $message.warning('请输入短信验证码')
-  }
-  else {
-    if (!code)
-      return $message.warning('请输入验证码')
-  }
 
   try {
     loading.value = true
     $message.loading('正在验证，请稍后...', { key: 'login' })
 
-    // 对密码进行 RSA 加密
     const encryptedPassword = await encryptPassword(password, request)
 
-    // 构造登录参数 - 使用新的后端接口格式
     const params = {
       username,
-      password: encryptedPassword, // 使用加密后的密码
-      code,
-      codeKey,
-      phone, // 短信验证码时需要
-      authType: 'password_captcha', // 使用用户名密码+验证码登录方式
-      encrypted: true, // 标记密码已加密
-      userClient: 'pc', // 客户端类型：pc端
-      appId: import.meta.env.VITE_APP_ID || 'forge_pc_001', // 客户端AppId
-      appSecret: import.meta.env.VITE_APP_SECRET || undefined, // 客户端密钥（可选）
+      password: encryptedPassword,
+      authType: 'password',
+      encrypted: true,
+      userClient: 'pc',
+      appId: import.meta.env.VITE_APP_ID || 'forge_pc_001',
+      appSecret: import.meta.env.VITE_APP_SECRET || undefined,
     }
 
     const res = await api.login(params)
@@ -742,15 +332,12 @@ async function handleLogin() {
       onLoginSuccess(res.data)
     }
     else {
-      // 登录失败后刷新验证码
-      await handleLoginFailure()
+      $message.destroy('login')
     }
   }
   catch (error) {
     $message.destroy('login')
     console.error(error)
-    // 登录失败后刷新验证码
-    await handleLoginFailure()
   }
   loading.value = false
 }
@@ -852,9 +439,8 @@ async function handleSocialLoginMessage(event) {
   }
 }
 
-// 页面加载时获取登录配置和验证码
+// 页面加载：三方登录等
 onMounted(() => {
-  loadLoginConfig()
   loadSocialPlatforms()
   // 监听三方登录消息
   window.addEventListener('message', handleSocialLoginMessage)
@@ -868,12 +454,7 @@ onMounted(() => {
   }
 })
 
-// 组件卸载时清理定时器
 onUnmounted(() => {
-  if (smsTimer.value) {
-    clearInterval(smsTimer.value)
-  }
-  // 移除消息监听
   window.removeEventListener('message', handleSocialLoginMessage)
 })
 
@@ -1360,249 +941,6 @@ async function loadAndSetMenuData() {
   font-size: 16px;
 }
 
-/* Captcha */
-.captcha-wrapper {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.captcha-image {
-  width: 120px;
-  height: 48px;
-  border-radius: 10px;
-  border: 1.5px solid #e2e8f0;
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f8fafc;
-}
-
-.captcha-image:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.captcha-image:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.captcha-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.captcha-loading {
-  color: #94a3b8;
-  font-size: 1.5rem;
-}
-
-/* Slider verify trigger */
-.slider-verify-trigger {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  height: 44px;
-  border-radius: 10px;
-  border: 1.5px solid #e2e8f0;
-  background: #f8fafc;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  font-size: 0.875rem;
-  color: #64748b;
-  font-weight: 500;
-  user-select: none;
-}
-
-.slider-verify-trigger:hover {
-  border-color: #3b82f6;
-  background: #eff6ff;
-  color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.slider-verify-trigger.verified {
-  border-color: #22c55e;
-  background: #f0fdf4;
-  color: #16a34a;
-  cursor: default;
-}
-
-.slider-verify-trigger.verified:hover {
-  box-shadow: none;
-}
-
-.trigger-icon {
-  display: flex;
-  align-items: center;
-  font-size: 1rem;
-}
-
-.trigger-arrow {
-  margin-left: auto;
-  font-size: 0.875rem;
-  opacity: 0.5;
-  transition: transform 0.2s;
-}
-
-.slider-verify-trigger:hover .trigger-arrow {
-  transform: translateX(3px);
-  opacity: 0.8;
-}
-
-/* Slider modal overlay */
-.slider-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-
-/* Slider modal card */
-.slider-modal {
-  position: relative;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 20px;
-  padding: 2rem 1.75rem 1.5rem;
-  width: 100%;
-  max-width: 400px;
-  box-shadow:
-    0 24px 48px rgba(15, 23, 42, 0.15),
-    0 8px 16px rgba(15, 23, 42, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-}
-
-.slider-modal-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  background: #f1f5f9;
-  color: #94a3b8;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.875rem;
-  transition: all 0.2s ease;
-  padding: 0;
-}
-
-.slider-modal-close:hover {
-  background: #e2e8f0;
-  color: #475569;
-}
-
-.slider-modal-header {
-  text-align: center;
-  margin-bottom: 1.25rem;
-}
-
-.slider-modal-icon {
-  width: 52px;
-  height: 52px;
-  background: linear-gradient(135deg, #eff6ff, #dbeafe);
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.375rem;
-  color: #3b82f6;
-  margin: 0 auto 12px;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-}
-
-.slider-modal-title {
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 4px;
-}
-
-.slider-modal-desc {
-  font-size: 0.8125rem;
-  color: #94a3b8;
-  margin: 0;
-}
-
-.slider-modal-body {
-  display: flex;
-  justify-content: center;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.slider-modal-tip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin: 14px 0 0;
-  font-size: 0.75rem;
-  color: #cbd5e1;
-}
-
-/* Modal transitions */
-.modal-enter-active {
-  animation: modalIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.modal-leave-active {
-  animation: modalOut 0.25s ease-in forwards;
-}
-
-@keyframes modalIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9) translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes modalOut {
-  from {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.95) translateY(10px);
-  }
-}
-
-/* SMS button */
-.sms-button {
-  min-width: 120px;
-  white-space: nowrap;
-  border-radius: 10px;
-}
-
-.mb-3 {
-  margin-bottom: 12px;
-}
-
 /* Form options */
 .form-options {
   margin-bottom: 24px;
@@ -1758,15 +1096,6 @@ async function loadAndSetMenuData() {
 
 .dark .divider-text {
   background: transparent;
-}
-
-.dark .slider-modal {
-  background: rgba(30, 41, 59, 0.98);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.dark .slider-modal-title {
-  color: #f1f5f9;
 }
 
 /* Reduced motion */

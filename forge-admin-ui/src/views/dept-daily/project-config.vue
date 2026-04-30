@@ -62,131 +62,14 @@
       </div>
     </n-card>
 
-    <n-card
+    <ProjectConfigFormPanel
       v-else
-      class="project-form-page"
-      :bordered="false"
-      :segmented="{ footer: 'soft', content: true }"
-      size="medium"
-    >
-      <template #header>
-        <div class="form-page-header">
-          <n-space align="center" :size="12" wrap>
-            <n-button secondary @click="closeForm">
-              返回列表
-            </n-button>
-            <div class="form-page-title-wrap">
-              <span class="form-page-title">{{ formPageTitle }}</span>
-              <span class="form-page-sub">{{ formPageSubtitle }}</span>
-            </div>
-          </n-space>
-        </div>
-      </template>
-
-      <div class="form-page-body">
-        <n-form ref="formRef" :model="edit.form" :rules="rules" label-placement="left" label-width="108">
-        <n-grid :cols="isFormWide ? 2 : 1" :x-gap="20" :y-gap="16">
-          <n-form-item-gi label="项目名" path="projectName">
-            <n-input v-model:value="edit.form.projectName" placeholder="请输入项目名" :disabled="edit.readOnly" />
-          </n-form-item-gi>
-          <n-form-item-gi label="项目类别" path="projectCategory">
-            <n-select
-              v-model:value="edit.form.projectCategory"
-              placeholder="请选择"
-              :options="categoryOptions"
-              :consistent-menu-width="false"
-              :disabled="edit.readOnly"
-            />
-          </n-form-item-gi>
-          <n-form-item-gi label="项目负责人" path="leaderUserId">
-            <n-select
-              v-model:value="edit.form.leaderUserId"
-              filterable
-              remote
-              clearable
-              placeholder="输入姓名/用户名搜索"
-              :options="leaderOptions"
-              :loading="userLoading"
-              :consistent-menu-width="false"
-              :disabled="edit.readOnly"
-              @search="handleUserSearch"
-              @update:value="onLeaderChange"
-            />
-          </n-form-item-gi>
-          <n-form-item-gi label="立项时间" path="startDate">
-            <n-date-picker v-model:value="edit.form.startDate" type="date" clearable class="w-full" :disabled="edit.readOnly" />
-          </n-form-item-gi>
-          <n-form-item-gi label="预计截止日期" path="planEndDate" :span="isFormWide ? 1 : 2">
-            <n-date-picker v-model:value="edit.form.planEndDate" type="date" clearable class="w-full" :disabled="edit.readOnly" />
-          </n-form-item-gi>
-          <n-form-item-gi label="备注" path="remark" :span="2">
-            <n-input v-model:value="edit.form.remark" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" placeholder="选填" :disabled="edit.readOnly" />
-          </n-form-item-gi>
-
-          <n-gi :span="2">
-            <n-divider title-placement="left" style="margin: 4px 0 12px">
-              项目组成员
-            </n-divider>
-          </n-gi>
-          <n-form-item-gi :span="2" :show-label="false" :show-feedback="false" class="member-form-item member-form-item--stretch">
-            <div class="member-panel">
-              <div class="member-panel-head">
-                <span class="member-panel-hint">
-                  {{ edit.readOnly ? `以下为项目成员列表（共 ${edit.form.memberUserIds.length} 人）` : `搜索添加成员，下方为已选列表（共 ${edit.form.memberUserIds.length} 人）` }}
-                </span>
-              </div>
-              <n-select
-                v-model:value="memberPickerValue"
-                filterable
-                remote
-                clearable
-                :clear-filter-after-select="true"
-                placeholder="搜索姓名或用户名，选中即加入列表"
-                :options="memberOptions"
-                :loading="userLoading"
-                :consistent-menu-width="false"
-                class="member-add-select"
-                :disabled="edit.readOnly"
-                @search="handleUserSearch"
-                @update:value="onPickMember"
-              />
-              <div class="member-table-wrap">
-                <n-data-table
-                  :columns="memberColumns"
-                  :data="memberTableRows"
-                  :loading="memberBriefLoading"
-                  :pagination="false"
-                  size="small"
-                  :bordered="false"
-                  :row-key="r => r.userId"
-                  :scroll-x="isFormWide ? 1100 : 720"
-                  flex-height
-                  class="member-data-table"
-                >
-                  <template #empty>
-                    <div class="member-empty">
-                      暂无成员。请使用上方搜索添加；成员可参与该项目月报填报。
-                    </div>
-                  </template>
-                </n-data-table>
-              </div>
-            </div>
-          </n-form-item-gi>
-        </n-grid>
-      </n-form>
-      </div>
-
-      <template #footer>
-        <n-space justify="end" class="form-page-footer">
-          <n-button :disabled="edit.saving" @click="closeForm">
-            {{ edit.readOnly ? '关闭' : '取消' }}
-          </n-button>
-          <n-button v-if="!edit.readOnly" type="primary" :loading="edit.saving" @click="save">
-            保存
-          </n-button>
-        </n-space>
-      </template>
-    </n-card>
+      ref="formPanelRef"
+      :edit="edit"
+      :project-detail-status="projectDetailStatus"
+      @close="closeForm"
+      @save="save"
+    />
 
     <n-modal v-model:show="importer.show" preset="card" title="Excel导入项目" style="width: 640px">
       <n-space vertical :size="12">
@@ -235,16 +118,13 @@
 
 <script setup>
 import { h, nextTick, onMounted, reactive, ref, computed } from 'vue'
-import { useMediaQuery } from '@vueuse/core'
 import { NButton, NTag, NSpace } from 'naive-ui'
+import ProjectConfigFormPanel from './components/ProjectConfigFormPanel.vue'
 import { projectCategoryLabel, PROJECT_CATEGORY_OPTIONS } from '@/constants/dept-daily-project-category'
-import { fetchProjectUsersBrief, pageProjects, getProjectDetail, createProject, updateProject, deleteProject, importProjectsExcel, finishProject } from '@/api/dept-daily/project'
-import { pageUsers } from '@/api/system/user'
+import { pageProjects, getProjectDetail, createProject, updateProject, deleteProject, importProjectsExcel, finishProject } from '@/api/dept-daily/project'
 import { useUserStore } from '@/store'
 
 const userStore = useUserStore()
-/** 表单区两列布局（与成员表横向滚动宽度联动） */
-const isFormWide = useMediaQuery('(min-width: 768px)')
 const loading = ref(false)
 const rows = ref([])
 
@@ -466,9 +346,12 @@ function formatDateToIso(ms) {
   return `${y}-${m}-${dd}`
 }
 
-const formRef = ref(null)
+const formPanelRef = ref(null)
 /** 是否在页面内展示配置表单（替代原弹窗） */
 const showForm = ref(false)
+
+/** 编辑/查看时同步后端项目状态，用于「项目状态」只读展示 */
+const projectDetailStatus = ref(null)
 
 const edit = reactive({
   saving: false,
@@ -484,60 +367,6 @@ const edit = reactive({
     projectCategory: null,
   },
 })
-
-const formPageTitle = computed(() => {
-  const name = (edit.form.projectName || '').trim()
-  if (!edit.form.id) {
-    if (!name)
-      return '新项目配置'
-    return `${name}项目配置`
-  }
-  return `${name || '未命名项目'}项目配置`
-})
-
-const formPageSubtitle = computed(() =>
-  edit.readOnly
-    ? '查看项目信息与成员'
-    : edit.form.id
-      ? '修改项目信息与成员，保存后生效（仅负责人可编辑）'
-      : '填写下方信息完成立项；保存后进入“待审批”，审批通过后再进行月报填报',
-)
-
-const rules = {
-  projectName: { required: true, message: '请输入项目名', trigger: ['blur', 'input'] },
-  projectCategory: { required: true, message: '请选择项目类别', trigger: ['change'] },
-  leaderUserId: { required: true, type: 'number', message: '请选择负责人', trigger: ['change'] },
-  planEndDate: { required: true, type: 'number', message: '请选择预计截止日期', trigger: ['change'] },
-}
-
-const userLoading = ref(false)
-const leaderOptions = ref([])
-const memberOptions = ref([])
-/** 仅用于「添加成员」单选，选中后写入 memberUserIds 并清空 */
-const memberPickerValue = ref(null)
-let userSearchSeq = 0
-
-const memberTableRows = ref([])
-const memberBriefLoading = ref(false)
-
-function mapBriefRowToOption(row) {
-  if (row?.userId == null)
-    return null
-  return {
-    value: row.userId,
-    label: `${row.realName || row.username || ''}${row.username ? `（${row.username}）` : ''}`,
-  }
-}
-
-function applyRowsToPickerOptions(rows) {
-  const opts = (rows || []).map(mapBriefRowToOption).filter(Boolean)
-  leaderOptions.value = mergeUserOptions(leaderOptions.value, opts)
-  // 成员添加下拉（memberPicker）只负责“新增选择”：
-  // 编辑回显时先重置 memberOptions，避免上一次搜索结果残留。
-  const selectedIds = new Set((edit.form.memberUserIds || []).map(v => Number(v)))
-  const optsForMember = opts.filter(o => !selectedIds.has(Number(o.value)))
-  memberOptions.value = optsForMember
-}
 
 function normalizeUserId(v) {
   if (v == null || v === '')
@@ -558,225 +387,22 @@ function ensureLeaderInMembers() {
     edit.form.memberUserIds = [leaderId, ...(edit.form.memberUserIds || [])]
 }
 
-function normalizeMemberRoles(rows) {
-  const leaderId = normalizeUserId(edit.form.leaderUserId)
-  return (rows || []).map((row) => {
-    const uid = normalizeUserId(row?.userId)
-    if (uid == null)
-      return row
-    const role = uid === leaderId ? 'LEADER' : 'MEMBER'
-    return { ...row, memberRole: row?.memberRole || role }
-  })
-}
-
-async function refreshMemberTable() {
-  memberBriefLoading.value = true
-  try {
-    ensureLeaderInMembers()
-    const ids = edit.form.memberUserIds || []
-    if (!ids.length) {
-      memberTableRows.value = []
-      return
-    }
-    const res = await fetchProjectUsersBrief(ids)
-    memberTableRows.value = normalizeMemberRoles(res.data || [])
-    applyRowsToPickerOptions(memberTableRows.value)
-  }
-  catch (e) {
-    console.error(e)
-    window.$message?.error(e?.response?.data?.message || e?.message || '加载成员信息失败')
-  }
-  finally {
-    memberBriefLoading.value = false
-  }
-}
-
-function cellText(v) {
-  return v != null && String(v).trim() !== '' ? v : '—'
-}
-
-const memberColumns = [
-  {
-    title: '姓名',
-    key: 'realName',
-    width: 120,
-    ellipsis: { tooltip: true },
-    render: row => cellText(row.realName),
-  },
-  {
-    title: '用户名',
-    key: 'username',
-    width: 128,
-    ellipsis: { tooltip: true },
-    render: row => cellText(row.username),
-  },
-  {
-    title: '部门',
-    key: 'deptName',
-    minWidth: 110,
-    ellipsis: { tooltip: true },
-    render: row => cellText(row.deptName),
-  },
-  {
-    title: '电话',
-    key: 'phone',
-    width: 132,
-    render: row => cellText(row.phone),
-  },
-  {
-    title: '项目角色',
-    key: 'memberRole',
-    width: 100,
-    render: (row) => {
-      if (!row.memberRole)
-        return '—'
-      if (row.memberRole === 'LEADER') {
-        return h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => '负责人' })
-      }
-      if (row.memberRole === 'MEMBER') {
-        return h(NTag, { size: 'small', type: 'info', bordered: false }, { default: () => '成员' })
-      }
-      return row.memberRole
-    },
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 76,
-    fixed: 'right',
-    render: row => (edit.readOnly
-      ? '—'
-      : h(
-          NButton,
-          { size: 'small', quaternary: true, type: 'error', onClick: () => removeMember(row.userId) },
-          { default: () => '移除' },
-        )),
-  },
-]
-
-async function onPickMember(val) {
-  if (edit.readOnly)
-    return
-  const uid = normalizeUserId(val)
-  if (uid == null)
-    return
-  const cur = edit.form.memberUserIds
-  if (cur.some(x => Number(x) === uid)) {
-    window.$message?.warning('该成员已在列表中')
-    memberPickerValue.value = undefined
-    await nextTick()
-    return
-  }
-  cur.push(uid)
-  memberPickerValue.value = undefined
-  await nextTick()
-  await refreshMemberTable()
-}
-
-function removeMember(uid) {
-  if (edit.readOnly)
-    return
-  edit.form.memberUserIds = edit.form.memberUserIds.filter(x => x !== uid)
-  refreshMemberTable()
-}
-
-function mapUserToOption(u) {
-  const id = u?.id ?? u?.userId
-  if (id == null)
-    return null
-  return {
-    label: `${u.realName || u.username || u.nickName || ''}${u.username ? `（${u.username}）` : ''}`,
-    value: id,
-  }
-}
-
-/** 远程搜索新来的 options 与原选项合并（按 id 去重），避免已选的姓名被刷成 id */
-function mergeUserOptions(existing, incoming) {
-  const map = new Map()
-  for (const o of existing || []) {
-    if (o != null && o.value != null)
-      map.set(o.value, o)
-  }
-  for (const o of incoming || []) {
-    if (o != null && o.value != null)
-      map.set(o.value, o)
-  }
-  return [...map.values()]
-}
-
-async function handleUserSearch(q) {
-  const kw = (q || '').trim()
-  if (!kw)
-    return
-  const seq = ++userSearchSeq
-  userLoading.value = true
-  try {
-    const res = await pageUsers({
-      pageNum: 1,
-      pageSize: 20,
-      realName: kw || undefined,
-      userStatus: 1,
-    })
-    if (seq !== userSearchSeq)
-      return
-    const records = res.data?.records || res.data?.list || []
-    const opts = records.map(u => mapUserToOption(u)).filter(Boolean)
-
-    // 成员添加下拉：过滤掉“已选成员”（负责人也属于已选成员）
-    const selectedIds = new Set((edit.form.memberUserIds || []).filter(v => v != null))
-    const optsForMember = opts.filter(o => !selectedIds.has(Number(o.value)))
-
-    // 负责人下拉：保证当前负责人选项一定存在，避免切换关键字后 label 丢失
-    const leaderId = normalizeUserId(edit.form.leaderUserId)
-    const selectedFromTable = (memberTableRows.value || []).map(mapBriefRowToOption).filter(Boolean)
-
-    const keepLeader = leaderId == null
-      ? []
-      : mergeUserOptions(
-          (leaderOptions.value || []).filter(o => Number(o.value) === leaderId),
-          (selectedFromTable || []).filter(o => Number(o.value) === leaderId),
-        )
-
-    leaderOptions.value = mergeUserOptions(keepLeader, opts)
-    memberOptions.value = optsForMember
-  }
-  catch (e) {
-    console.error(e)
-  }
-  finally {
-    if (seq === userSearchSeq)
-      userLoading.value = false
-  }
-}
-
 function resetForm() {
   edit.form.id = null
   edit.form.projectName = ''
   edit.form.leaderUserId = null
   edit.form.memberUserIds = []
   edit.readOnly = false
-  memberPickerValue.value = undefined
-  memberTableRows.value = []
   edit.form.startDate = null
   edit.form.planEndDate = null
   edit.form.remark = ''
   edit.form.projectCategory = null
-}
-
-async function onLeaderChange(v) {
-  const uid = normalizeUserId(v)
-  if (uid == null)
-    return
-  if (!hasMember(uid))
-    edit.form.memberUserIds = [uid, ...(edit.form.memberUserIds || [])]
-  await refreshMemberTable()
+  projectDetailStatus.value = null
 }
 
 function openCreate() {
   resetForm()
   edit.readOnly = false
-  leaderOptions.value = []
-  memberOptions.value = []
   showForm.value = true
 }
 
@@ -843,6 +469,7 @@ async function openEdit(row) {
   }
   resetForm()
   edit.readOnly = false
+  projectDetailStatus.value = row.status ?? null
   edit.form.id = row.id
   edit.form.projectName = row.projectName
   edit.form.projectCategory = row.projectCategory || 'OTHER'
@@ -850,31 +477,17 @@ async function openEdit(row) {
   edit.form.memberUserIds = []
   edit.form.startDate = row.startDate ? new Date(row.startDate).getTime() : null
   edit.form.planEndDate = row.planEndDate ? new Date(row.planEndDate).getTime() : null
-  memberPickerValue.value = undefined
   showForm.value = true
 
-  // 回显成员与备注：服务端 memberRows 带部门、电话及项目角色
   try {
     const res = await getProjectDetail(row.id)
     const proj = res.data?.project
+    if (proj?.status)
+      projectDetailStatus.value = proj.status
     if (proj?.remark != null)
       edit.form.remark = proj.remark
-    const apiRows = res.data?.memberRows
-    const membersFallback = res.data?.members || []
-    if (apiRows != null) {
-      memberTableRows.value = normalizeMemberRoles(apiRows)
-      edit.form.memberUserIds = memberTableRows.value.map(r => r.userId).filter(Boolean)
-      ensureLeaderInMembers()
-      applyRowsToPickerOptions(apiRows)
-    }
-    else {
-      edit.form.memberUserIds = membersFallback
-        .filter(m => m?.isActive === 1)
-        .map(m => m.userId)
-        .filter(Boolean)
-      ensureLeaderInMembers()
-      await refreshMemberTable()
-    }
+    await nextTick()
+    await formPanelRef.value?.applyDetailMembers?.(res.data)
   }
   catch (e) {
     console.error(e)
@@ -886,6 +499,7 @@ async function openView(row) {
     return
   resetForm()
   edit.readOnly = true
+  projectDetailStatus.value = row.status ?? null
 
   edit.form.id = row.id
   edit.form.projectName = row.projectName
@@ -894,32 +508,17 @@ async function openView(row) {
   edit.form.memberUserIds = []
   edit.form.startDate = row.startDate ? new Date(row.startDate).getTime() : null
   edit.form.planEndDate = row.planEndDate ? new Date(row.planEndDate).getTime() : null
-  memberPickerValue.value = undefined
   showForm.value = true
 
-  // 回显：复用 getProjectDetail 以展示成员列表与备注
   try {
     const res = await getProjectDetail(row.id)
     const proj = res.data?.project
+    if (proj?.status)
+      projectDetailStatus.value = proj.status
     if (proj?.remark != null)
       edit.form.remark = proj.remark
-
-    const apiRows = res.data?.memberRows
-    if (apiRows != null) {
-      memberTableRows.value = normalizeMemberRoles(apiRows)
-      edit.form.memberUserIds = memberTableRows.value.map(r => r.userId).filter(Boolean)
-      ensureLeaderInMembers()
-      applyRowsToPickerOptions(apiRows)
-      return
-    }
-
-    const membersFallback = res.data?.members || []
-    edit.form.memberUserIds = membersFallback
-      .filter(m => m?.isActive === 1)
-      .map(m => m.userId)
-      .filter(Boolean)
-    ensureLeaderInMembers()
-    await refreshMemberTable()
+    await nextTick()
+    await formPanelRef.value?.applyDetailMembers?.(res.data)
   }
   catch (e) {
     console.error(e)
@@ -930,7 +529,7 @@ async function save() {
   if (edit.readOnly)
     return
   try {
-    await formRef.value?.validate?.()
+    await formPanelRef.value?.validate?.()
   }
   catch {
     return
@@ -985,7 +584,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  min-height: 100dvh;
+  /* min-height: 100dvh; */
   box-sizing: border-box;
   padding: 12px clamp(12px, 2vw, 28px) 16px;
 }
@@ -1024,154 +623,7 @@ onMounted(() => {
   overflow: auto;
 }
 
-/* —— 表单页 —— */
-.project-form-page {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100dvh - 72px);
-  width: 100%;
-}
+/* ProjectConfigFormPanel 自带表单布局样式 */
 
-.project-form-page :deep(.n-card),
-.project-form-page :deep(.n-card.n-card--bordered) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  width: 100%;
-}
-
-.project-form-page :deep(.n-card__content),
-.project-form-page :deep(.n-card-content) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.project-form-page :deep(.n-card-footer) {
-  flex-shrink: 0;
-}
-
-.form-page-header {
-  width: 100%;
-}
-
-.form-page-title-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.form-page-title {
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--n-title-text-color);
-}
-
-.form-page-sub {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--n-text-color-3);
-}
-
-.form-page-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden auto;
-  width: 100%;
-}
-
-.form-page-body :deep(.n-form) {
-  width: 100%;
-}
-
-.form-page-footer {
-  padding-top: 4px;
-}
-
-.member-form-item :deep(.n-form-item-blank) {
-  min-height: 0;
-}
-
-.member-form-item--stretch {
-  align-self: stretch;
-}
-
-.member-form-item--stretch :deep(.n-form-item) {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.member-form-item--stretch :deep(.n-form-item .n-form-item-blank),
-.member-form-item--stretch :deep(.n-form-item__body) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.member-panel {
-  width: 100%;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-radius: 8px;
-  border: 1px solid var(--n-border-color);
-  background: rgba(128, 128, 128, 0.04);
-}
-
-.member-panel-head {
-  padding: 10px 12px 0;
-}
-
-.member-panel-hint {
-  font-size: 13px;
-  color: var(--n-text-color-3);
-  line-height: 1.45;
-}
-
-.member-add-select {
-  padding: 8px 12px 12px;
-  width: 100%;
-  flex-shrink: 0;
-}
-
-.member-table-wrap {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 0 12px 12px;
-  border-top: 1px solid var(--n-divider-color);
-}
-
-/* flex-height：父级给稳定高度便于表体纵向滚动随视窗变化 */
-.member-data-table {
-  flex: 1;
-  width: 100%;
-  min-height: 220px;
-  height: clamp(260px, calc(100dvh - 392px), 72vh);
-}
-
-.member-data-table :deep(.n-data-table-th) {
-  font-weight: 500;
-}
-
-.member-empty {
-  padding: 20px 8px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--n-text-color-3);
-  line-height: 1.5;
-}
 </style>
 
