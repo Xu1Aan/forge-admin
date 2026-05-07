@@ -20,6 +20,15 @@
             </n-button>
           </n-space>
           <n-space>
+            <n-button secondary :loading="exporting" @click="exportMonthExcel">
+              导出当月
+            </n-button>
+            <n-button secondary :loading="exporting" @click="exportYearExcel">
+              导出全年
+            </n-button>
+            <n-button tertiary @click="openOrderSetting">
+              导出顺序设置
+            </n-button>
             <n-button tertiary @click="goUnfilled">
               未填报人员
             </n-button>
@@ -38,6 +47,28 @@
         @update:page-size="onPageSize"
       />
     </n-card>
+
+    <n-modal v-model:show="orderModal.show" preset="card" style="width: min(720px, 92vw)" title="考勤导出人员顺序">
+      <n-space vertical size="small">
+        <div class="text-sm text-gray-500">
+          每行一个姓名，导出时会按该顺序排序；未在列表中的人员会排在最后。
+        </div>
+        <n-input
+          v-model:value="orderModal.text"
+          type="textarea"
+          :autosize="{ minRows: 10, maxRows: 22 }"
+          placeholder="例如：&#10;姓名1&#10;姓名2&#10;姓名3"
+        />
+        <n-space justify="end">
+          <n-button @click="orderModal.show = false">
+            取消
+          </n-button>
+          <n-button type="primary" :loading="orderModal.saving" @click="saveOrderSetting">
+            保存
+          </n-button>
+        </n-space>
+      </n-space>
+    </n-modal>
   </div>
 </template>
 
@@ -45,7 +76,7 @@
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NTag } from 'naive-ui'
-import { pageAttendanceMonthTable } from '@/api/dept-daily/overview'
+import { exportAttendance, getDeptDailyOverviewSetting, pageAttendanceMonthTable, saveDeptDailyOverviewSetting } from '@/api/dept-daily/overview'
 import { useUserStore } from '@/store/modules/user'
 
 const userStore = useUserStore()
@@ -63,7 +94,14 @@ const employeeType = ref(null)
 const keyword = ref('')
 
 const loading = ref(false)
+const exporting = ref(false)
 const rows = ref([])
+
+const orderModal = reactive({
+  show: false,
+  text: '',
+  saving: false,
+})
 
 const yearOptions = computed(() => {
   const y = now.getFullYear()
@@ -162,6 +200,94 @@ async function load() {
   }
   finally {
     loading.value = false
+  }
+}
+
+async function exportYearExcel() {
+  exporting.value = true
+  try {
+    const blob = await exportAttendance({
+      year: year.value,
+      deptId: deptId.value || undefined,
+      employeeType: employeeType.value ?? undefined,
+      keyword: keyword.value?.trim() || undefined,
+    })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${year.value}年度考勤表.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+  catch (e) {
+    console.error(e)
+    window.$message?.error(e?.message || '导出失败')
+  }
+  finally {
+    exporting.value = false
+  }
+}
+
+async function exportMonthExcel() {
+  exporting.value = true
+  try {
+    const blob = await exportAttendance({
+      year: year.value,
+      month: month.value,
+      deptId: deptId.value || undefined,
+      employeeType: employeeType.value ?? undefined,
+      keyword: keyword.value?.trim() || undefined,
+    })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${year.value}-${String(month.value).padStart(2, '0')}考勤表.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+  catch (e) {
+    console.error(e)
+    window.$message?.error(e?.message || '导出失败')
+  }
+  finally {
+    exporting.value = false
+  }
+}
+
+async function openOrderSetting() {
+  orderModal.show = true
+  try {
+    const res = await getDeptDailyOverviewSetting({ deptId: deptId.value || undefined, employeeType: employeeType.value ?? undefined })
+    orderModal.text = res?.data?.attendanceExportOrder || ''
+  }
+  catch (e) {
+    console.warn(e)
+    orderModal.text = ''
+  }
+}
+
+async function saveOrderSetting() {
+  orderModal.saving = true
+  try {
+    await saveDeptDailyOverviewSetting({
+      deptId: deptId.value || null,
+      officeId: null,
+      employeeType: employeeType.value ?? null,
+      attendanceExportOrder: orderModal.text || null,
+    })
+    window.$message?.success('保存成功')
+    orderModal.show = false
+  }
+  catch (e) {
+    console.error(e)
+    window.$message?.error(e?.message || '保存失败')
+  }
+  finally {
+    orderModal.saving = false
   }
 }
 

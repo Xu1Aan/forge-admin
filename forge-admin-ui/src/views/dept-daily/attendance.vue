@@ -207,6 +207,18 @@
             :consistent-menu-width="false"
           />
         </n-form-item>
+        <n-form-item label="请假时长">
+          <n-radio-group v-model:value="leaveModal.leaveDays">
+            <n-space>
+              <n-radio :value="1">
+                1天
+              </n-radio>
+              <n-radio :value="0.5">
+                半天
+              </n-radio>
+            </n-space>
+          </n-radio-group>
+        </n-form-item>
         <n-form-item label="备注">
           <n-input
             v-model:value="leaveModal.remark"
@@ -267,6 +279,7 @@ const leaveModal = reactive({
   show: false,
   date: '',
   leaveType: null,
+  leaveDays: 1,
   remark: '',
   loading: false,
   /** 关弹窗未确定时刷新格内展示 */
@@ -535,6 +548,7 @@ function onLeaveCornerClick(day) {
 function openChangeLeaveTypeModal(day) {
   leaveModal.date = day.date
   leaveModal.leaveType = day.leaveType || 'ANNUAL'
+  leaveModal.leaveDays = day.leaveDays ?? 1
   leaveModal.remark = String(day.remark ?? '')
   leaveModal.reloadOnClose = true
   leaveModal.show = true
@@ -565,7 +579,7 @@ async function confirmLeaveModal() {
   const lt = leaveModal.leaveType
   leaveModal.loading = true
   try {
-    const ok = await putDayMerge(d, { status: 'LEAVE', leaveType: lt, remark: leaveModal.remark })
+    const ok = await putDayMerge(d, { status: 'LEAVE', leaveType: lt, leaveDays: leaveModal.leaveDays, remark: leaveModal.remark })
     if (ok) {
       leaveModal.reloadOnClose = false
       leaveModal.show = false
@@ -576,13 +590,14 @@ async function confirmLeaveModal() {
   }
 }
 
-async function putDayMerge(day, { status, leaveType, remark }) {
+async function putDayMerge(day, { status, leaveType, leaveDays, remark }) {
   if (!day?.date) return false
   const remarkTrim = remark == null || remark === '' ? '' : String(remark).trim()
   const body = {
     date: day.date,
     status,
     leaveType: status === 'LEAVE' ? leaveType : null,
+    leaveDays: status === 'LEAVE' ? (leaveDays ?? 1) : null,
     remark: remarkTrim.length ? remarkTrim : null,
   }
   try {
@@ -594,6 +609,7 @@ async function putDayMerge(day, { status, leaveType, remark }) {
         ...cur,
         status,
         leaveType: status === 'LEAVE' ? leaveType : null,
+        leaveDays: status === 'LEAVE' ? (leaveDays ?? 1) : null,
         remark: body.remark,
       }
       monthData.value.days[idx] = next
@@ -610,7 +626,7 @@ async function putDayMerge(day, { status, leaveType, remark }) {
 
 async function doToggle(date, leaveType, remark) {
   try {
-    const res = await toggleDay(year.value, month.value, { date, leaveType, remark })
+    const res = await toggleDay(year.value, month.value, { date, leaveType, leaveDays: 1, remark })
     const updated = res.data
     // 就地更新
     if (monthData.value?.days?.length) {

@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS `dept_attendance_item` (
     `work_date`   date         NOT NULL COMMENT '日期',
     `day_status`  varchar(20)  NOT NULL COMMENT '日状态：WORK出勤/REST休息/TRAVEL出差/LEAVE请假',
     `leave_type`  varchar(30)           DEFAULT NULL COMMENT '请假类型（day_status=LEAVE时必填）',
+    `leave_days`  decimal(3,1)          DEFAULT NULL COMMENT '请假天数（day_status=LEAVE时可用）：默认1.0，支持0.5',
     `remark`      varchar(200)          DEFAULT NULL COMMENT '当日备注',
     `create_dept` bigint                DEFAULT NULL COMMENT '创建部门',
     `create_by`   bigint                DEFAULT NULL COMMENT '创建者',

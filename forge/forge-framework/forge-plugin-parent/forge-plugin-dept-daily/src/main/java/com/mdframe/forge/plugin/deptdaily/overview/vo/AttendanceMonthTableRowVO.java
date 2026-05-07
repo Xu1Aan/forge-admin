@@ -23,7 +23,7 @@ public class AttendanceMonthTableRowVO {
     private Integer workDays;
     private Integer restDays;
     private Integer travelDays;
-    private Integer leaveDays;
+    private Double leaveDays;
 
     /**
      * 1..31 的当日状态（WORK/REST/TRAVEL/LEAVE）

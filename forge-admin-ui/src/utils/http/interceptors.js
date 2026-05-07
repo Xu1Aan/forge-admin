@@ -19,6 +19,12 @@ export function setupInterceptors(axiosInstance) {
    * 响应成功拦截器
    */
   function resResolve(response) {
+    // 文件下载（blob）直接放行：不做解密/业务码判断
+    // 否则 response.data 是 Blob，读取 data.code 会导致【undefined】误报
+    if (response?.config?.responseType === 'blob') {
+      return Promise.resolve(response.data)
+    }
+
     // 先进行解密处理
     try {
       response = decryptResponse(response)
@@ -44,6 +50,25 @@ export function setupInterceptors(axiosInstance) {
     }
 
     const { data, status, config, statusText, headers } = response
+
+    // blob下载但后端返回JSON错误时：把Blob解析成JSON，避免【undefined】这类无效提示
+    if (config?.responseType === 'blob' && headers['content-type']?.includes('json') && data instanceof Blob) {
+      return data.text().then((txt) => {
+        try {
+          const j = JSON.parse(txt)
+          const code = j?.code ?? j?.status ?? status
+          const message = j?.message ?? j?.msg ?? statusText
+          const needTip = config?.needTip !== false
+          const finalMessage = resolveResError(code, message, needTip)
+          return Promise.reject({ code, message: finalMessage, error: j, isBusinessError: true, needTip })
+        }
+        catch (e) {
+          const message = txt || statusText || '下载失败'
+          window.$message?.error(message)
+          return Promise.reject({ code: status, message, error: txt, skipErrorHandler: true })
+        }
+      })
+    }
 
     // 处理JSON响应
     if (headers['content-type']?.includes('json')) {

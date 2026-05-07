@@ -38,5 +38,10 @@ public class DeptDailyReportSetting extends TenantEntity {
      * YYYY-MM
      */
     private String projectReportStartYm;
+
+    /**
+     * 考勤导出人员顺序（按姓名，每行一个）
+     */
+    private String attendanceExportOrder;
 }
 

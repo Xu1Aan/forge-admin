@@ -24,5 +24,10 @@ public class DeptDailySysOrgLite extends TenantEntity {
      * 祖级编码（逗号分隔，如：1,2,3）
      */
     private String ancestors;
+
+    /**
+     * 组织名称（sys_org.org_name）
+     */
+    private String orgName;
 }
 

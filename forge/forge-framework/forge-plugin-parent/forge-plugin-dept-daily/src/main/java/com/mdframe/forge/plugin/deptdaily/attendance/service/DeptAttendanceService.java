@@ -116,6 +116,7 @@ public class DeptAttendanceService {
             if (override != null) {
                 dto.setStatus(override.getDayStatus());
                 dto.setLeaveType(override.getLeaveType());
+                dto.setLeaveDays(override.getLeaveDays());
                 dto.setRemark(override.getRemark());
             } else {
                 dto.setStatus(defaultStatus);
@@ -154,6 +155,7 @@ public class DeptAttendanceService {
         if (AttendanceDayStatus.LEAVE.equals(status) && StringUtils.isBlank(req.getLeaveType())) {
             throw new IllegalArgumentException("请假类型不能为空");
         }
+        Double leaveDays = sanitizeLeaveDays(status, req.getLeaveDays());
 
         boolean off = calendarService.isOffDay(date);
         String defaultStatus = off ? AttendanceDayStatus.REST : AttendanceDayStatus.WORK;
@@ -166,6 +168,7 @@ public class DeptAttendanceService {
 
         boolean isDefaultAndNoExtra = status.equals(defaultStatus)
                 && StringUtils.isBlank(req.getLeaveType())
+                && leaveDays == null
                 && StringUtils.isBlank(req.getRemark());
 
         if (isDefaultAndNoExtra) {
@@ -182,6 +185,7 @@ public class DeptAttendanceService {
         it.setWorkDate(date);
         it.setDayStatus(status);
         it.setLeaveType(StringUtils.trimToNull(req.getLeaveType()));
+        it.setLeaveDays(AttendanceDayStatus.LEAVE.equals(status) ? leaveDays : null);
         it.setRemark(StringUtils.trimToNull(req.getRemark()));
 
         if (existing == null) {
@@ -238,14 +242,19 @@ public class DeptAttendanceService {
         }
 
         String leaveType = StringUtils.trimToNull(req.getLeaveType());
+        Double leaveDays = sanitizeLeaveDays(null, req.getLeaveDays());
         String remark = StringUtils.trimToNull(req.getRemark());
 
         if (AttendanceDayStatus.LEAVE.equals(next) && StringUtils.isBlank(leaveType)) {
             throw new IllegalArgumentException("请假类型不能为空");
         }
+        if (AttendanceDayStatus.LEAVE.equals(next) && leaveDays == null) {
+            leaveDays = 1.0;
+        }
 
         boolean isDefaultAndNoExtra = next.equals(defaultStatus)
                 && StringUtils.isBlank(leaveType)
+                && leaveDays == null
                 && StringUtils.isBlank(remark);
 
         if (isDefaultAndNoExtra) {
@@ -260,6 +269,7 @@ public class DeptAttendanceService {
             it.setWorkDate(date);
             it.setDayStatus(next);
             it.setLeaveType(AttendanceDayStatus.LEAVE.equals(next) ? leaveType : null);
+            it.setLeaveDays(AttendanceDayStatus.LEAVE.equals(next) ? leaveDays : null);
             it.setRemark(remark);
             if (existing == null) {
                 itemMapper.insert(it);
@@ -277,8 +287,17 @@ public class DeptAttendanceService {
         dto.setDefaultStatus(defaultStatus);
         dto.setStatus(next);
         dto.setLeaveType(AttendanceDayStatus.LEAVE.equals(next) ? leaveType : null);
+        dto.setLeaveDays(AttendanceDayStatus.LEAVE.equals(next) ? leaveDays : null);
         dto.setRemark(remark);
         return dto;
+    }
+
+    private static Double sanitizeLeaveDays(String status, Double leaveDays) {
+        if (!AttendanceDayStatus.LEAVE.equals(status) && status != null) return null;
+        if (leaveDays == null) return null;
+        // 仅支持 0.5 或 1.0（后续如需 0.25/按小时可扩展）
+        if (leaveDays.doubleValue() == 0.5d || leaveDays.doubleValue() == 1.0d) return leaveDays;
+        throw new IllegalArgumentException("请假天数仅支持0.5或1.0");
     }
 
     @Transactional(rollbackFor = Exception.class)

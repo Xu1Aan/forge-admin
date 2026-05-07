@@ -28,3 +28,20 @@ export function pageAttendanceMonthTable(params) {
   return request.get('/dept-daily/overview/attendance/month-table/page', { params })
 }
 
+export function exportAttendanceYear(params) {
+  return request.get('/dept-daily/overview/attendance/year-export', {
+    params,
+    responseType: 'blob',
+    encrypt: false,
+    replay: false,
+  })
+}
+
+export function exportAttendance(params) {
+  return request.get('/dept-daily/overview/attendance/export', {
+    params,
+    responseType: 'blob',
+    encrypt: false,
+    replay: false,
+  })
+}

@@ -23,6 +23,8 @@ CREATE TABLE dept_daily_report_setting (
   work_report_start_ym    CHAR(7) NULL COMMENT '个人工作月报起始月 YYYY-MM',
   project_report_start_ym CHAR(7) NULL COMMENT '项目月报起始月 YYYY-MM',
 
+  attendance_export_order TEXT NULL COMMENT '考勤导出人员顺序（按姓名，每行一个；未在列表中的人员排在最后）',
+
   create_by    BIGINT NULL,
   create_time  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   create_dept  BIGINT NULL,

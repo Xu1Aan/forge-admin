@@ -15,6 +15,11 @@ public class AttendanceToggleDayRequest {
     private String leaveType;
 
     /**
+     * 当后端切换到 LEAVE 时可选：请假天数（默认1.0，支持0.5）
+     */
+    private Double leaveDays;
+
+    /**
      * 可选备注
      */
     private String remark;

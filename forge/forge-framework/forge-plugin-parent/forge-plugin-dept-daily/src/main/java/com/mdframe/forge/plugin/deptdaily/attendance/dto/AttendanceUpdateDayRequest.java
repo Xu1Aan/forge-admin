@@ -19,6 +19,11 @@ public class AttendanceUpdateDayRequest {
      */
     private String leaveType;
 
+    /**
+     * status=LEAVE 时可选：请假天数（默认1.0，支持0.5）
+     */
+    private Double leaveDays;
+
     private String remark;
 }
 

@@ -42,6 +42,17 @@ public class ReplayAttackFilter implements Filter {
             return;
         }
 
+        // 文件下载类 GET：浏览器地址栏直开无法携带 X-Timestamp/X-Nonce，需放行
+        // - /dept-daily/overview/attendance/year-export
+        // - /api/dept-daily/overview/attendance/year-export
+        if ("GET".equalsIgnoreCase(httpRequest.getMethod())
+                && path != null
+                && (path.contains("/dept-daily/overview/attendance/year-export")
+                || path.contains("/dept-daily/overview/attendance/export"))) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         // Actuator / K8s 探针无防重放头，必须与 Sa-Token 等对 /actuator/** 放行一致
         if (path.startsWith("/actuator/")) {
             chain.doFilter(request, response);

@@ -33,6 +33,7 @@ import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -84,12 +85,14 @@ public class DeptDailyOverviewService {
             s.setAttendanceStartYm(StringUtils.trimToNull(req.getAttendanceStartYm()));
             s.setWorkReportStartYm(StringUtils.trimToNull(req.getWorkReportStartYm()));
             s.setProjectReportStartYm(StringUtils.trimToNull(req.getProjectReportStartYm()));
+            s.setAttendanceExportOrder(StringUtils.trimToNull(req.getAttendanceExportOrder()));
             settingMapper.insert(s);
             return;
         }
         existing.setAttendanceStartYm(StringUtils.trimToNull(req.getAttendanceStartYm()));
         existing.setWorkReportStartYm(StringUtils.trimToNull(req.getWorkReportStartYm()));
         existing.setProjectReportStartYm(StringUtils.trimToNull(req.getProjectReportStartYm()));
+        existing.setAttendanceExportOrder(StringUtils.trimToNull(req.getAttendanceExportOrder()));
         settingMapper.updateById(existing);
     }
 
@@ -237,7 +240,8 @@ public class DeptDailyOverviewService {
             Map<LocalDate, DeptAttendanceItem> overrides = itemMap.get(uid);
 
             List<String> dayList = new java.util.ArrayList<>(31);
-            int work = 0, rest = 0, travel = 0, leave = 0;
+            int work = 0, rest = 0, travel = 0;
+            double leave = 0d;
 
             for (int d = 1; d <= 31; d++) {
                 if (d > daysInMonth) {
@@ -260,7 +264,14 @@ public class DeptDailyOverviewService {
                 if (AttendanceDayStatus.WORK.equals(effective)) work++;
                 else if (AttendanceDayStatus.REST.equals(effective)) rest++;
                 else if (AttendanceDayStatus.TRAVEL.equals(effective)) travel++;
-                else if (AttendanceDayStatus.LEAVE.equals(effective)) leave++;
+                else if (AttendanceDayStatus.LEAVE.equals(effective)) {
+                    double ld = 1d;
+                    if (overrides != null) {
+                        DeptAttendanceItem ov = overrides.get(date);
+                        if (ov != null && ov.getLeaveDays() != null) ld = ov.getLeaveDays();
+                    }
+                    leave += ld;
+                }
             }
 
             AttendanceMonthTableRowVO r = new AttendanceMonthTableRowVO();
@@ -280,6 +291,208 @@ public class DeptDailyOverviewService {
         Page<AttendanceMonthTableRowVO> out = new Page<>(userPage.getCurrent(), userPage.getSize(), userPage.getTotal());
         out.setRecords(outRows);
         return out;
+    }
+
+    /**
+     * 考勤一览表导出专用：不分页，返回所有人员的当月状态与覆盖项（含 leaveType）。
+     * <p>
+     * 说明：导出需要将请假类型映射为符号（病/事/休/婚/丧/年/产/探/伤等），因此不能复用仅含 dayStatus 的 VO。
+     */
+    public List<AttendanceMonthExportUserRow> listAttendanceMonthExportRows(int year, int month,
+                                                                            Long deptId, Long officeId,
+                                                                            Integer employeeType, String keyword) {
+        Long tenantId = tenantOrDefault();
+
+        LambdaQueryWrapper<DeptDailySysUserLite> uw = new LambdaQueryWrapper<DeptDailySysUserLite>()
+                .eq(DeptDailySysUserLite::getTenantId, tenantId)
+                .eq(DeptDailySysUserLite::getUserStatus, 1)
+                .eq(employeeType != null, DeptDailySysUserLite::getEmployeeType, employeeType);
+
+        List<Long> scopeOrgIds = resolveScopeOrgIds(tenantId, deptId, officeId);
+        List<Long> scopeUserIds = resolveScopeUserIds(tenantId, scopeOrgIds);
+        if (scopeUserIds != null) {
+            if (scopeUserIds.isEmpty()) return List.of();
+            uw.in(DeptDailySysUserLite::getId, scopeUserIds);
+        } else {
+            Long scopeOrgId = resolveScopeOrgId(deptId, officeId);
+            if (scopeOrgId != null) {
+                List<Long> descendant = orgLiteMapper.selectDescendantOrgIds(tenantId, scopeOrgId);
+                if (descendant != null && !descendant.isEmpty()) {
+                    uw.in(DeptDailySysUserLite::getCreateDept, descendant);
+                } else {
+                    uw.eq(DeptDailySysUserLite::getCreateDept, scopeOrgId);
+                }
+            }
+        }
+
+        String kw = StringUtils.trimToNull(keyword);
+        if (kw != null) {
+            uw.and(w -> w.like(DeptDailySysUserLite::getUsername, kw).or().like(DeptDailySysUserLite::getRealName, kw));
+        }
+        List<DeptDailySysUserLite> users = userLiteMapper.selectList(uw);
+        if (users == null || users.isEmpty()) return List.of();
+
+        // 按配置的“姓名顺序”排序（scope=tenant+dept+office+employeeType），未配置则回落按id
+        List<String> orderedNames = resolveAttendanceExportOrderNames(deptId, officeId, employeeType);
+        if (orderedNames == null || orderedNames.isEmpty()) {
+            users = users.stream()
+                    .sorted(Comparator.comparingLong(DeptDailySysUserLite::getId))
+                    .toList();
+        } else {
+            Map<String, Integer> idx = new HashMap<>(orderedNames.size() * 2);
+            for (int i = 0; i < orderedNames.size(); i++) {
+                String n = orderedNames.get(i);
+                if (StringUtils.isNotBlank(n) && !idx.containsKey(n)) idx.put(n, i);
+            }
+            users = users.stream().sorted((a, b) -> {
+                String an = StringUtils.trimToEmpty(a.getRealName());
+                String bn = StringUtils.trimToEmpty(b.getRealName());
+                int ai = idx.getOrDefault(an, Integer.MAX_VALUE);
+                int bi = idx.getOrDefault(bn, Integer.MAX_VALUE);
+                if (ai != bi) return Integer.compare(ai, bi);
+                // 未在名单中的，按姓名、用户名、ID稳定排序
+                int c1 = an.compareTo(bn);
+                if (c1 != 0) return c1;
+                String au = StringUtils.trimToEmpty(a.getUsername());
+                String bu = StringUtils.trimToEmpty(b.getUsername());
+                int c2 = au.compareTo(bu);
+                if (c2 != 0) return c2;
+                return Long.compare(a.getId(), b.getId());
+            }).toList();
+        }
+
+        List<Long> userIds = users.stream().map(DeptDailySysUserLite::getId).toList();
+
+        // sheet 状态：NONE/DRAFT/SUBMITTED（导出文件里一般不展示，但保留以备后续）
+        Map<Long, DeptAttendanceSheet> sheetByUser = new HashMap<>(users.size() * 2);
+        List<DeptAttendanceSheet> sheets = attendanceSheetMapper.selectList(new LambdaQueryWrapper<DeptAttendanceSheet>()
+                .eq(DeptAttendanceSheet::getTenantId, tenantId)
+                .eq(DeptAttendanceSheet::getYear, year)
+                .eq(DeptAttendanceSheet::getMonth, month)
+                .in(DeptAttendanceSheet::getUserId, userIds));
+        if (sheets != null) {
+            for (DeptAttendanceSheet s : sheets) sheetByUser.put(s.getUserId(), s);
+        }
+
+        // 覆盖项（含请假类型）
+        YearMonth ym = YearMonth.of(year, month);
+        LocalDate start = ym.atDay(1);
+        LocalDate end = ym.atEndOfMonth();
+        List<DeptAttendanceItem> items = attendanceItemMapper.selectList(new LambdaQueryWrapper<DeptAttendanceItem>()
+                .eq(DeptAttendanceItem::getTenantId, tenantId)
+                .in(DeptAttendanceItem::getUserId, userIds)
+                .ge(DeptAttendanceItem::getWorkDate, start)
+                .le(DeptAttendanceItem::getWorkDate, end));
+        Map<Long, Map<LocalDate, DeptAttendanceItem>> itemMap = new HashMap<>(users.size() * 2);
+        if (items != null) {
+            for (DeptAttendanceItem it : items) {
+                if (it.getUserId() == null || it.getWorkDate() == null) continue;
+                itemMap.computeIfAbsent(it.getUserId(), k -> new HashMap<>()).put(it.getWorkDate(), it);
+            }
+        }
+
+        calendarService.ensureYearCached(year);
+        Map<LocalDate, com.mdframe.forge.plugin.deptdaily.attendance.entity.DeptCalendarDay> calByDay =
+                calendarService.monthCalendarMap(tenantId, year, month);
+        int daysInMonth = ym.lengthOfMonth();
+
+        List<AttendanceMonthExportUserRow> out = new ArrayList<>(users.size());
+        for (DeptDailySysUserLite u : users) {
+            Long uid = u.getId();
+            DeptAttendanceSheet sh = sheetByUser.get(uid);
+            Map<LocalDate, DeptAttendanceItem> overrides = itemMap.get(uid);
+
+            List<AttendanceDayEffective> effectiveDays = new ArrayList<>(31);
+            int work = 0, rest = 0, travel = 0;
+            double leave = 0d;
+
+            for (int d = 1; d <= 31; d++) {
+                if (d > daysInMonth) {
+                    effectiveDays.add(AttendanceDayEffective.empty());
+                    continue;
+                }
+                LocalDate date = ym.atDay(d);
+                var calRow = calByDay.get(date);
+                boolean off = isOffDayForRowLocal(date, calRow);
+                String defaultStatus = off ? AttendanceDayStatus.REST : AttendanceDayStatus.WORK;
+
+                String dayStatus = defaultStatus;
+                String leaveType = null;
+                if (overrides != null) {
+                    DeptAttendanceItem ov = overrides.get(date);
+                    if (ov != null && StringUtils.isNotBlank(ov.getDayStatus())) {
+                        dayStatus = ov.getDayStatus();
+                        leaveType = StringUtils.trimToNull(ov.getLeaveType());
+                    }
+                }
+                effectiveDays.add(new AttendanceDayEffective(dayStatus, leaveType));
+
+                if (AttendanceDayStatus.WORK.equals(dayStatus)) work++;
+                else if (AttendanceDayStatus.REST.equals(dayStatus)) rest++;
+                else if (AttendanceDayStatus.TRAVEL.equals(dayStatus)) travel++;
+                else if (AttendanceDayStatus.LEAVE.equals(dayStatus)) {
+                    double ld = 1d;
+                    if (overrides != null) {
+                        DeptAttendanceItem ov = overrides.get(date);
+                        if (ov != null && ov.getLeaveDays() != null) ld = ov.getLeaveDays();
+                    }
+                    leave += ld;
+                }
+            }
+
+            AttendanceMonthExportUserRow r = new AttendanceMonthExportUserRow();
+            r.setUserId(uid);
+            r.setUsername(u.getUsername());
+            r.setRealName(u.getRealName());
+            r.setEmployeeType(u.getEmployeeType());
+            r.setSheetStatus(sh != null ? sh.getStatus() : "NONE");
+            r.setWorkDays(work);
+            r.setRestDays(rest);
+            r.setTravelDays(travel);
+            r.setLeaveDays(leave);
+            r.setDays(effectiveDays);
+            out.add(r);
+        }
+        return out;
+    }
+
+    private List<String> resolveAttendanceExportOrderNames(Long deptId, Long officeId, Integer employeeType) {
+        DeptDailyReportSetting setting = getSetting(deptId, officeId, employeeType);
+        if (setting == null) return List.of();
+        String raw = StringUtils.trimToNull(setting.getAttendanceExportOrder());
+        if (raw == null) return List.of();
+        // 支持：换行/逗号/顿号分隔
+        String normalized = raw.replace("，", ",").replace("、", ",");
+        String[] parts = normalized.split("[,\\r\\n]+");
+        List<String> out = new ArrayList<>();
+        for (String p : parts) {
+            String n = StringUtils.trimToNull(p);
+            if (n != null) out.add(n);
+        }
+        return out;
+    }
+
+    @lombok.Data
+    public static class AttendanceMonthExportUserRow {
+        private Long userId;
+        private String username;
+        private String realName;
+        private Integer employeeType;
+        private String sheetStatus;
+        private Integer workDays;
+        private Integer restDays;
+        private Integer travelDays;
+        private Double leaveDays;
+        /**
+         * 1..31：当日有效状态（含请假类型）
+         */
+        private List<AttendanceDayEffective> days;
+    }
+
+    public record AttendanceDayEffective(String dayStatus, String leaveType) {
+        public static AttendanceDayEffective empty() {
+            return new AttendanceDayEffective("", null);
+        }
     }
 
     /**

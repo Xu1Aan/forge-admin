@@ -33,6 +33,13 @@ public class DeptAttendanceItem extends TenantEntity {
      */
     private String leaveType;
 
+    /**
+     * 请假天数（dayStatus=LEAVE）
+     * - null 表示默认 1.0
+     * - 支持 0.5 / 1.0
+     */
+    private Double leaveDays;
+
     private String remark;
 }
 
